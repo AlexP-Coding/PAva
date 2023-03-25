@@ -5,7 +5,10 @@ classes:
 - Date: 2023-03-25
 =#
 
-struct Class
+#acho que nao e suposto ser assim
+abstract type Object end
+
+struct Class <: Object
     name::String
     superclasses::Vector
     slots::Vector{Symbol}
@@ -53,3 +56,21 @@ getproperty(c1, :real)
 getproperty(c1, :imag)
 setproperty!(c1, :imag, -1)
 c1.imag += 3
+
+function add(a, b)
+    println("I entered the add generic function.")
+end
+
+function add(a::Complexnumber, b::Complexnumber)
+    real_sum = a.real + b.real
+    imag_sum = a.imag + b.imag
+    return new(ComplexNumber, real=real_sum, imag=imag_sum)
+end
+
+c2 = new(ComplexNumber, real=3, imag=4)
+
+println(add(c1, c2))
+
+function print_object(obj, io)
+    println("I entered the print generic function.")
+end
