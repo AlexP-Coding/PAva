@@ -25,3 +25,7 @@ Manifest.toml
 
 # IntelliJ Idea files
 .idea/
+
+# Directory for ideas to explore
+# that will not necessarily be implemented
+explore/**
