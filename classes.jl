@@ -5,63 +5,110 @@ classes:
 - Date: 2023-03-25
 =#
 
-#acho que nao e suposto ser assim
-abstract type Object end
+#abstract type Object end
+#struct Class <: Object
 
-struct Class <: Object
+struct Class
     name::String
-    superclasses::Vector
-    slots::Vector{Symbol}
+    superclasses::Vector{Class}
+    slots::Dict{Symbol, Any}
+
+    function Class(name::String, superclasses, slots=Dict{Symbol, Any}())
+        new(name, superclasses, slots)
+    end
 end
 
-function Class(name::String, superclasses, slots=Symbol[])
-    new(name, superclasses, slots)
-end
+# global dictionary to keep track of defined classes
+class_registry = Dict{String, Class}()
+
+object_class = Class("Object", [], Dict())
+class_registry["Object"] = object_class
 
 function defclass(name::String, superclasses, slots)
-    new_classe = Class(name, superclasses, slots)
-    return new_classe
+    slots_dict = Dict(slot => nothing for slot in slots)
+    
+    new_superclasses = Vector{Class}()
+    
+    #= all classes inherit, directly or indirectly from Object class=#
+    for classe in superclasses
+        class_obj = class_registry[string(classe)]
+        push!(new_superclasses, class_obj)
+    end
+
+    if !(:Object in superclasses)
+        class_objet = class_registry["Object"]
+        push!(new_superclasses, class_objet)
+    end
+    
+    new_classe = Class(name, new_superclasses, slots_dict)
+    class_registry[name] = new_classe
 end
 
-ComplexNumber = defclass("ComplexNumber", [], [:real, :imag])
-
-println(ComplexNumber.name)
-println(ComplexNumber.superclasses)
-println(ComplexNumber.slots[1])
-println(ComplexNumber.slots[2])
-
-mutable struct Complexnumber
-    class::Class
-    real::Int64
-    imag::Int64
-end
-
-function new(classe::Class; kwargs...)
-    instance = Complexnumber(classe, 0, 0)
-    for i in 1:length(classe.slots)
-        slot = classe.slots[i]
+function new(classe::Symbol; kwargs...)
+    class_obj = class_registry[string(classe)]
+    for (slot, value) in class_obj.slots
         if haskey(kwargs, slot)
-            setproperty!(instance, slot, kwargs[slot])
+            class_obj.slots[slot] = kwargs[slot]
         end
     end
-    return instance
+    return class_obj
 end
 
-c1 = new(ComplexNumber, real=1, imag=2)
+defclass("ComplexNumber", [], [:real, :imag])
+defclass("Shape", [], [])
+defclass("Device", [], [])
 
-println(typeof(c1))
-println(c1.real)
+c1 = new(:ComplexNumber, real=1, imag=2)
+
+defclass("Line", [:Shape], [:from, :to])
+defclass("Circle", [:Shape], [:center, :radius])
+
+defclass("Screen", [:Device], [])
+defclass("Printer", [:Device], [])
+
+function getproperty(classe::Class, slot::Symbol)
+    #return get(classe.slots, slot, nothing)
+    if haskey(classe.slots, slot)
+        return classe.slots[slot]
+    end
+
+    # search for the property in superclasses
+    for superclass in classe.superclasses
+        value = getproperty(class_registry[superclass], slot)
+        if value !== nothing
+            return value
+        end
+    end
+
+    error("$(classe.name) does not have slot $slot")
+end
 
 getproperty(c1, :real)
-getproperty(c1, :imag)
+
+function setproperty!(classe::Class, slot::Symbol, value::Any)
+    if haskey(classe.slots, slot)
+        classe.slots[slot] = value
+    else
+        error("$(classe.name) does not have slot $slot")
+    end
+    return classe.slots[slot]
+end
+
 setproperty!(c1, :imag, -1)
-c1.imag += 3
+
+# does not work, stackoverflow error infinite loop
+function Base.getproperty(classe::Class, slot::Symbol)
+    getproperty(classe, slot)
+end
+
+#println(c1.real)
+#c1.imag += 3
 
 function add(a, b)
     println("I entered the add generic function.")
 end
 
-function add(a::Complexnumber, b::Complexnumber)
+#=function add(a::Complexnumber, b::Complexnumber)
     real_sum = a.real + b.real
     imag_sum = a.imag + b.imag
     return new(ComplexNumber, real=real_sum, imag=imag_sum)
@@ -73,4 +120,4 @@ println(add(c1, c2))
 
 function print_object(obj, io)
     println("I entered the print generic function.")
-end
+end=#
