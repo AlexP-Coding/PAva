@@ -12,9 +12,10 @@ struct Class
     name::String
     superclasses::Vector{Class}
     slots::Dict{Symbol, Any}
+    metaclass::Union{Type{}, Nothing}
 
-    function Class(name::String, superclasses, slots=Dict{Symbol, Any}())
-        new(name, superclasses, slots)
+    function Class(name::String, superclasses, slots=Dict{Symbol, Any}(), metaclass=nothing)
+        new(name, superclasses, slots, metaclass)
     end
 end
 
@@ -29,7 +30,7 @@ function defclass(name::String, superclasses, slots)
     
     new_superclasses = Vector{Class}()
     
-    #= all classes inherit, directly or indirectly from Object class=#
+    # all classes inherit, directly or indirectly from Object class
     for classe in superclasses
         class_obj = class_registry[string(classe)]
         push!(new_superclasses, class_obj)
@@ -72,7 +73,7 @@ function getproperty(classe::Class, slot::Symbol)
         return classe.slots[slot]
     end
 
-    # search for the property in superclasses
+    # search in superclasses
     for superclass in classe.superclasses
         value = getproperty(class_registry[superclass], slot)
         if value !== nothing
@@ -104,9 +105,12 @@ end
 #println(c1.real)
 #c1.imag += 3
 
-function add(a, b)
-    println("I entered the add generic function.")
+function defgeneric(name::Symbol, args...)
+    @eval ($name)(args...) = invoke_method($name, args...)
+    println("I entered a generic function.")
 end
+
+defgeneric(:add, :a, :b)
 
 #=function add(a::Complexnumber, b::Complexnumber)
     real_sum = a.real + b.real
