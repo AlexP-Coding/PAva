@@ -55,18 +55,6 @@ function new(classe::Symbol; kwargs...)
     return class_obj
 end
 
-defclass("ComplexNumber", [], [:real, :imag])
-defclass("Shape", [], [])
-defclass("Device", [], [])
-
-c1 = new(:ComplexNumber, real=1, imag=2)
-
-defclass("Line", [:Shape], [:from, :to])
-defclass("Circle", [:Shape], [:center, :radius])
-
-defclass("Screen", [:Device], [])
-defclass("Printer", [:Device], [])
-
 function Base.getproperty(classe::Class, slot::Symbol)
     if haskey(getfield(classe, :slots), slot)
         return getfield(classe, :slots)[slot]
@@ -83,8 +71,6 @@ function Base.getproperty(classe::Class, slot::Symbol)
     error("$(classe.name) does not have slot $slot")
 end
 
-getproperty(c1, :real)
-
 function Base.setproperty!(classe::Class, slot::Symbol, value::Any)
     if haskey(getfield(classe, :slots), slot)
         getfield(classe, :slots)[slot] = value
@@ -94,6 +80,19 @@ function Base.setproperty!(classe::Class, slot::Symbol, value::Any)
     return getfield(classe, :slots)[slot]
 end
 
+defclass("ComplexNumber", [], [:real, :imag])
+defclass("Shape", [], [])
+defclass("Device", [], [])
+
+c1 = new(:ComplexNumber, real=1, imag=2)
+
+defclass("Line", [:Shape], [:from, :to])
+defclass("Circle", [:Shape], [:center, :radius])
+
+defclass("Screen", [:Device], [])
+defclass("Printer", [:Device], [])
+
+getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
 
 c1.real
@@ -101,22 +100,31 @@ c1.imag
 c1.imag += 3
 
 function defgeneric(name::Symbol, args...)
-    @eval ($name)(args...) = invoke_method($name, args...)
+    #@eval ($name)(args...) = nothing
+    f = eval(Expr(:function, Expr(:call, name, args...), :nothing))
+    eval(Expr(:(=), name, f))
     println("I entered a generic function.")
 end
 
 defgeneric(:add, :a, :b)
 
-#=function add(a::Complexnumber, b::Complexnumber)
-    real_sum = a.real + b.real
-    imag_sum = a.imag + b.imag
-    return new(ComplexNumber, real=real_sum, imag=imag_sum)
+defgeneric(:print_object, :obj, :io)
+
+
+function defmethod(name::Symbol, argtypes::Tuple, body::Expr)
+    generic_function = getfield(Main, name)
+    if !isa(generic_function, Function)
+        error("'$name' not a function")
+    end
+    f = Expr(:function, Expr(:call, generic_function, argtypes...), body)
+    eval(Meta.parse(string(f)))
 end
 
+# does not work, says a not defined
+defmethod(:add, (a::Int64, b::Int64), :(a+b))
+
+#defgeneric(:print_object, :obj, :io)
+#=
 c2 = new(ComplexNumber, real=3, imag=4)
-
 println(add(c1, c2))
-
-function print_object(obj, io)
-    println("I entered the print generic function.")
-end=#
+=#
