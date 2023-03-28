@@ -47,9 +47,9 @@ end
 
 function new(classe::Symbol; kwargs...)
     class_obj = class_registry[string(classe)]
-    for (slot, value) in class_obj.slots
+    for (slot, value) in getfield(class_obj, :slots)
         if haskey(kwargs, slot)
-            class_obj.slots[slot] = kwargs[slot]
+            getfield(class_obj, :slots)[slot] = kwargs[slot]
         end
     end
     return class_obj
@@ -67,10 +67,9 @@ defclass("Circle", [:Shape], [:center, :radius])
 defclass("Screen", [:Device], [])
 defclass("Printer", [:Device], [])
 
-function getproperty(classe::Class, slot::Symbol)
-    #return get(classe.slots, slot, nothing)
-    if haskey(classe.slots, slot)
-        return classe.slots[slot]
+function Base.getproperty(classe::Class, slot::Symbol)
+    if haskey(getfield(classe, :slots), slot)
+        return getfield(classe, :slots)[slot]
     end
 
     # search in superclasses
@@ -86,24 +85,20 @@ end
 
 getproperty(c1, :real)
 
-function setproperty!(classe::Class, slot::Symbol, value::Any)
-    if haskey(classe.slots, slot)
-        classe.slots[slot] = value
+function Base.setproperty!(classe::Class, slot::Symbol, value::Any)
+    if haskey(getfield(classe, :slots), slot)
+        getfield(classe, :slots)[slot] = value
     else
         error("$(classe.name) does not have slot $slot")
     end
-    return classe.slots[slot]
+    return getfield(classe, :slots)[slot]
 end
 
 setproperty!(c1, :imag, -1)
 
-# does not work, stackoverflow error infinite loop
-function Base.getproperty(classe::Class, slot::Symbol)
-    getproperty(classe, slot)
-end
-
-#println(c1.real)
-#c1.imag += 3
+c1.real
+c1.imag
+c1.imag += 3
 
 function defgeneric(name::Symbol, args...)
     @eval ($name)(args...) = invoke_method($name, args...)
