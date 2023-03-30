@@ -5,63 +5,73 @@ classes:
 - Date: 2023-03-25
 =#
 
-#abstract type Object end
-#struct Class <: Object
-
-struct Class
-    name::String
-    superclasses::Vector{Class}
-    slots::Dict{Symbol, Any}
+struct class
+    name::Symbol
+    direct_superclasses::Vector{class}
+    direct_slots::Dict{Symbol, Any}
     metaclass::Union{Type{}, Nothing}
 
-    function Class(name::String, superclasses, slots=Dict{Symbol, Any}(), metaclass=nothing)
-        new(name, superclasses, slots, metaclass)
+    function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), metaclass=nothing)
+        new(name, direct_superclasses, direct_slots, metaclass)
     end
 end
 
 # global dictionary to keep track of defined classes
-class_registry = Dict{String, Class}()
+class_registry = Dict{Symbol, class}()
 
-object_class = Class("Object", [], Dict())
-class_registry["Object"] = object_class
+global Object = class(:Object, [], Dict())
+class_registry[:Object] = Object
 
-function defclass(name::String, superclasses, slots)
-    slots_dict = Dict(slot => nothing for slot in slots)
+function defclass(name::Symbol, direct_superclasses, direct_slots)
+    slots_dict = Dict(slot => nothing for slot in direct_slots)
     
-    new_superclasses = Vector{Class}()
+    new_superclasses = Vector{class}()
     
     # all classes inherit, directly or indirectly from Object class
-    for classe in superclasses
-        class_obj = class_registry[string(classe)]
+    for classe in direct_superclasses
+        class_obj = class_registry[classe]
         push!(new_superclasses, class_obj)
     end
 
-    if !(:Object in superclasses)
-        class_objet = class_registry["Object"]
+    if !(:Object in direct_superclasses)
+        class_objet = class_registry[:Object]
         push!(new_superclasses, class_objet)
     end
     
-    new_classe = Class(name, new_superclasses, slots_dict)
+    new_classe = class(name, new_superclasses, slots_dict)
     class_registry[name] = new_classe
+    return new_classe
 end
 
 function new(classe::Symbol; kwargs...)
-    class_obj = class_registry[string(classe)]
-    for (slot, value) in getfield(class_obj, :slots)
+    class_obj = class_registry[classe]
+    for (slot, value) in getfield(class_obj, :direct_slots)
         if haskey(kwargs, slot)
-            getfield(class_obj, :slots)[slot] = kwargs[slot]
+            getfield(class_obj, :direct_slots)[slot] = kwargs[slot]
         end
     end
     return class_obj
 end
 
-function Base.getproperty(classe::Class, slot::Symbol)
-    if haskey(getfield(classe, :slots), slot)
-        return getfield(classe, :slots)[slot]
+function Base.getproperty(classe::class, slot::Symbol)
+    if slot == :slots
+        return println([:name, :direct_superclasses, :direct_slots, :metaclass])
+    end
+    
+    if haskey(getfield(classe, :direct_slots), slot)
+        return getfield(classe, :direct_slots)[slot]
     end
 
+    if slot == :direct_slots
+        return println(keys(getfield(classe, :($slot))))
+    end
+
+    if isdefined(classe, slot)
+        return getfield(classe, :($slot))
+    end
+    
     # search in superclasses
-    for superclass in classe.superclasses
+    for superclass in getfield(classe, :direct_superclasses)
         value = getproperty(class_registry[superclass], slot)
         if value !== nothing
             return value
@@ -71,26 +81,31 @@ function Base.getproperty(classe::Class, slot::Symbol)
     error("$(classe.name) does not have slot $slot")
 end
 
-function Base.setproperty!(classe::Class, slot::Symbol, value::Any)
-    if haskey(getfield(classe, :slots), slot)
-        getfield(classe, :slots)[slot] = value
+function Base.setproperty!(classe::class, slot::Symbol, value::Any)
+    if haskey(getfield(classe, :direct_slots), slot)
+        getfield(classe, :direct_slots)[slot] = value
     else
         error("$(classe.name) does not have slot $slot")
     end
-    return getfield(classe, :slots)[slot]
+    return getfield(classe, :direct_slots)[slot]
 end
 
-defclass("ComplexNumber", [], [:real, :imag])
-defclass("Shape", [], [])
-defclass("Device", [], [])
+global Class = defclass(:Class, [], [])
+
+Class.name
+Class.slots
+
+global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
+
+defclass(:Shape, [], [])
+defclass(:Device, [], [])
 
 c1 = new(:ComplexNumber, real=1, imag=2)
 
-defclass("Line", [:Shape], [:from, :to])
-defclass("Circle", [:Shape], [:center, :radius])
 
-defclass("Screen", [:Device], [])
-defclass("Printer", [:Device], [])
+ComplexNumber.name
+ComplexNumber.direct_superclasses == [Object]
+ComplexNumber.direct_slots
 
 getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
@@ -99,17 +114,43 @@ c1.real
 c1.imag
 c1.imag += 3
 
+defclass(:Line, [:Shape], [:from, :to])
+defclass(:Circle, [:Shape], [:center, :radius])
+
+defclass(:Screen, [:Device], [])
+defclass(:Printer, [:Device], [])
+
+defclass(:Person, [], [[:name, reader=get_name, writer=set_name!],
+[:age, reader=get_age, writer=set_age!, initform=0],
+[:friend, reader=get_friend, writer=set_friend!]],
+metaclass=UndoableClass)
+
+defclass("ColorMixin", [], [[:color, reader=get_color, writer=set_color!]])
+
+defclass("ColoredLine", [:ColorMixin, :Line], [])
+defclass("ColoredCircle", [:ColorMixin, :Circle], [])
+
+defclass("ColoredPrinter", [:Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
+
+defclass("CountingClass", [:Class], [counter=0])
+
+defclass("Foo", [], [], metaclass=CountingClass)
+
+defclass("Bar", [], [], metaclass=CountingClass)
+
+#=
 function defgeneric(name::Symbol, args...)
     #@eval ($name)(args...) = nothing
     f = eval(Expr(:function, Expr(:call, name, args...), :nothing))
     eval(Expr(:(=), name, f))
+
+    nao usar eval, quote ou uma Expr
     println("I entered a generic function.")
 end
 
 defgeneric(:add, :a, :b)
 
 defgeneric(:print_object, :obj, :io)
-
 
 function defmethod(name::Symbol, argtypes::Tuple, body::Expr)
     generic_function = getfield(Main, name)
@@ -121,9 +162,8 @@ function defmethod(name::Symbol, argtypes::Tuple, body::Expr)
 end
 
 # does not work, says a not defined
-defmethod(:add, (a::Int64, b::Int64), :(a+b))
+#defmethod(:add, (Int64, Int64), :(a+b))
 
-#defgeneric(:print_object, :obj, :io)
 #=
 c2 = new(ComplexNumber, real=3, imag=4)
 println(add(c1, c2))
