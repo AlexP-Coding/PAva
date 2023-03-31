@@ -17,10 +17,10 @@ struct class
 end
 
 # global dictionary to keep track of defined classes
-class_registry = Dict{Symbol, class}()
+#class_registry = Dict{Symbol, class}()
 
 global Object = class(:Object, [], Dict())
-class_registry[:Object] = Object
+#class_registry[:Object] = Object
 
 function defclass(name::Symbol, direct_superclasses, direct_slots)
     slots_dict = Dict(slot => nothing for slot in direct_slots)
@@ -29,28 +29,28 @@ function defclass(name::Symbol, direct_superclasses, direct_slots)
     
     # all classes inherit, directly or indirectly from Object class
     for classe in direct_superclasses
-        class_obj = class_registry[classe]
-        push!(new_superclasses, class_obj)
+        #class_obj = class_registry[classe]
+        push!(new_superclasses, classe)
     end
 
-    if !(:Object in direct_superclasses)
-        class_objet = class_registry[:Object]
-        push!(new_superclasses, class_objet)
+    if !(Object in direct_superclasses)
+        #class_objet = class_registry[:Object]
+        push!(new_superclasses, Object)
     end
     
     new_classe = class(name, new_superclasses, slots_dict)
-    class_registry[name] = new_classe
+    #class_registry[name] = new_classe
     return new_classe
 end
 
-function new(classe::Symbol; kwargs...)
-    class_obj = class_registry[classe]
-    for (slot, value) in getfield(class_obj, :direct_slots)
+function new(classe::class; kwargs...)
+    #class_obj = class_registry[classe]
+    for (slot, value) in getfield(classe, :direct_slots)
         if haskey(kwargs, slot)
-            getfield(class_obj, :direct_slots)[slot] = kwargs[slot]
+            getfield(classe, :direct_slots)[slot] = kwargs[slot]
         end
     end
-    return class_obj
+    return classe
 end
 
 function Base.getproperty(classe::class, slot::Symbol)
@@ -72,7 +72,7 @@ function Base.getproperty(classe::class, slot::Symbol)
     
     # search in superclasses
     for superclass in getfield(classe, :direct_superclasses)
-        value = getproperty(class_registry[superclass], slot)
+        value = getproperty(superclass, slot)
         if value !== nothing
             return value
         end
@@ -97,11 +97,10 @@ Class.slots
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
-defclass(:Shape, [], [])
-defclass(:Device, [], [])
+global Shape = defclass(:Shape, [], [])
+global Device = defclass(:Device, [], [])
 
-c1 = new(:ComplexNumber, real=1, imag=2)
-
+c1 = new(ComplexNumber, real=1, imag=2)
 
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
@@ -114,29 +113,29 @@ c1.real
 c1.imag
 c1.imag += 3
 
-defclass(:Line, [:Shape], [:from, :to])
-defclass(:Circle, [:Shape], [:center, :radius])
+global Line = defclass(:Line, [Shape], [:from, :to])
+global Circle = defclass(:Circle, [Shape], [:center, :radius])
 
-defclass(:Screen, [:Device], [])
-defclass(:Printer, [:Device], [])
+global Screen = defclass(:Screen, [Device], [])
+global Printer = defclass(:Printer, [Device], [])
 
-defclass(:Person, [], [[:name, reader=get_name, writer=set_name!],
+global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!],
 [:age, reader=get_age, writer=set_age!, initform=0],
 [:friend, reader=get_friend, writer=set_friend!]],
 metaclass=UndoableClass)
 
-defclass("ColorMixin", [], [[:color, reader=get_color, writer=set_color!]])
+global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
 
-defclass("ColoredLine", [:ColorMixin, :Line], [])
-defclass("ColoredCircle", [:ColorMixin, :Circle], [])
+global ColoredLine = defclass(:ColoredLine, [ColorMixin, Line], [])
+global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
 
-defclass("ColoredPrinter", [:Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
+global ColoredPrinter = defclass(:ColoredPrinter, [Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
 
-defclass("CountingClass", [:Class], [counter=0])
+global CountingClass = defclass(:CountingClass, [Class], [counter=0])
 
-defclass("Foo", [], [], metaclass=CountingClass)
+global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
 
-defclass("Bar", [], [], metaclass=CountingClass)
+global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
 
 #=
 function defgeneric(name::Symbol, args...)
