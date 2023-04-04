@@ -9,6 +9,8 @@ struct class
     name::Symbol
     direct_superclasses::Vector{class}
     direct_slots::Dict{Symbol, Any}
+    #class_precedence_list::Vector{class}
+    #effective_slots::Dict{Symbol, Any}
     metaclass::Union{Type{}, Nothing}
 
     function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), metaclass=nothing)
@@ -16,10 +18,25 @@ struct class
     end
 end
 
+struct genericFunction
+    name::Symbol
+    methods::Vector{multiMethod}
+end
+
+struct multiMethod
+    specializers::Vector{class}
+    procedure::Vector{Any}
+    generic_function::genericFunction
+end
+
 # global dictionary to keep track of defined classes
 #class_registry = Dict{Symbol, class}()
 
-global Object = class(:Object, [], Dict())
+# root of class hierarchy
+global Top = class(:Top, [], Dict())
+
+# Object is a subclass of Top; all (regular) classes inherit from Object
+global Object = class(:Object, [Top], Dict())
 #class_registry[:Object] = Object
 
 function defclass(name::Symbol, direct_superclasses, direct_slots)
@@ -107,27 +124,48 @@ end
 
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
-        return println([:name, :direct_superclasses, :direct_slots, :metaclass])
-    end
-    
-    if haskey(getfield(classe, :direct_slots), slot)
-        return getfield(classe, :direct_slots)[slot]
+        if(classe == Class)
+            return println(collect(fieldnames(class)))
+        
+        else # TODO: or GenericFunction or MultiMethod
+            
+            all_slots = Vector{Symbol}()
+            # search in superclasses for slots
+            if(!isempty(getfield(classe, :direct_superclasses)))
+                for superclass in getfield(classe, :direct_superclasses)
+                    if superclass != Object
+                        append!(all_slots, keys(getfield(superclass, :direct_slots)))
+                    end
+                end
+            end
+            return println(append!(all_slots, keys(getfield(classe, :direct_slots))))
+        end
     end
 
     if slot == :direct_slots
-        return println(keys(getfield(classe, :($slot))))
+        if isempty(keys(getfield(classe, :($slot))))
+            return println([])
+        else
+            return println(keys(getfield(classe, :($slot))))
+        end
     end
 
-    if isdefined(classe, slot)
+    if slot == :name
         return getfield(classe, :($slot))
     end
-    
-    # search in superclasses
-    for superclass in getfield(classe, :direct_superclasses)
-        value = getproperty(superclass, slot)
-        if value !== nothing
-            return value
+
+    if slot == :direct_superclasses
+        if isdefined(classe, slot)
+            classes = []
+            for c in getfield(classe, :($slot))
+                push!(classes, c)
+            end
+            return classes
         end
+    end
+
+    if haskey(getfield(classe, :direct_slots), slot)
+        return getfield(classe, :direct_slots)[slot]
     end
 
     error("$(classe.name) does not have slot $slot")
@@ -144,8 +182,27 @@ end
 
 global Class = defclass(:Class, [], [])
 
+function class_name(classe::class) 
+    classe.name
+end
+
+function class_slots(classe::class) 
+    classe.slots
+end
+
 Class.name
 Class.slots
+
+class_name(Class)
+class_slots(Class)
+
+function class_direct_slots(classe::class) 
+    classe.direct_slots
+end
+
+function class_direct_superclasses(classe::class) 
+    classe.direct_superclasses
+end
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
@@ -158,6 +215,11 @@ ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
 ComplexNumber.direct_slots
 
+class_name(ComplexNumber)
+class_direct_superclasses(ComplexNumber)
+class_direct_slots(ComplexNumber)
+class_slots(ComplexNumber)
+
 getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
 
@@ -165,13 +227,22 @@ c1.real
 c1.imag
 c1.imag += 3
 
+global Circle = defclass(:Circle, [], [:center, :radius])
+global ColorMixin = defclass(:ColorMixin, [], [:color])
+global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
+class_name(Circle)
+class_direct_slots(Circle)
+class_direct_slots(ColoredCircle)
+class_slots(ColoredCircle)
+class_direct_superclasses(ColoredCircle)
+
 #global CountingClass = defclass(:CountingClass, [Class], [counter=0])
 global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
 global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
 
 
 global Line = defclass(:Line, [Shape], [:from, :to])
-global Circle = defclass(:Circle, [Shape], [:center, :radius])
+#global Circle = defclass(:Circle, [Shape], [:center, :radius])
 
 global Screen = defclass(:Screen, [Device], [])
 global Printer = defclass(:Printer, [Device], [])
@@ -180,10 +251,10 @@ global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
 
 global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
 
-global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
+#global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
 
 global ColoredLine = defclass(:ColoredLine, [ColorMixin, Line], [])
-global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
+#global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
 
 global ColoredPrinter = defclass(:ColoredPrinter, [Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
 
@@ -191,6 +262,9 @@ global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!
 [:age, reader=get_age, writer=set_age!, initform=0],
 [:friend, reader=get_friend, writer=set_friend!]],
 metaclass=UndoableClass)
+
+#global GenericFunction = defgeneric(:GenericFunction, [])
+#global MultiMethod = defmethod([], [], )
 
 #=
 function defgeneric(name::Symbol, args...)
