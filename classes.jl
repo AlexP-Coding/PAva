@@ -11,9 +11,10 @@ struct class
     direct_slots::Dict{Symbol, Any}
     #class_precedence_list::Vector{class}
     #effective_slots::Dict{Symbol, Any}
-    metaclass::Union{Type{}, Nothing}
+    metaclass::Union{class, Nothing}
 
     function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), metaclass=nothing)
+        println(metaclass)
         new(name, direct_superclasses, direct_slots, metaclass)
     end
 end
@@ -30,7 +31,8 @@ struct multiMethod
 end
 
 # global dictionary to keep track of instances
-instance_registry = Dict{Symbol, class}()
+#instance_registry = Dict{Symbol, class}()
+instance_registry = Vector{class}()
 
 # root of class hierarchy
 global Top = class(:Top, [], Dict())
@@ -39,7 +41,7 @@ global Top = class(:Top, [], Dict())
 global Object = class(:Object, [Top], Dict())
 #class_registry[:Object] = Object
 
-function defclass(name::Symbol, direct_superclasses, direct_slots)
+function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     #slots_dict = Dict(slot => nothing for slot in direct_slots)
     #println(direct_slots)
     slots_dict = Dict()
@@ -106,15 +108,35 @@ function defclass(name::Symbol, direct_superclasses, direct_slots)
         #class_objet = class_registry[:Object]
         push!(new_superclasses, Object)
     end
-    
-    new_classe = class(name, new_superclasses, slots_dict)
+
+    if haskey(kwargs, :metaclass)
+        new_classe = class(name, new_superclasses, slots_dict, kwargs[:metaclass])
+    else
+        new_classe = class(name, new_superclasses, slots_dict)
+    end
     #class_registry[name] = new_classe
     return new_classe
 end
 
+
+
+function Base.copy(m::class)
+    return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), getfield(m, :metaclass))
+end
+
 function allocate_instance(classe::class)
-    instance_registry[getfield(classe, :name)] = classe
-    return classe
+    #instance_registry[getfield(classe, :name)] = classe
+    println("allocate_instance:")
+    println(classe)
+    #instance = class(getfield(classe, :name), getfield(classe, :direct_superclasses), getfield(classe, :direct_slots), getfield(classe, :metaclass))
+    instance = copy(classe)
+
+    push!(instance_registry, instance)
+    return instance
+end
+
+function compute_cpl(classe::class)
+
 end
 
 function initialize(classe::class; kwargs...)
@@ -123,11 +145,12 @@ function initialize(classe::class; kwargs...)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
         end
     end
+    compute_cpl(classe)
 end
 
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
-    initialize(classe; kwargs...)
+    initialize(instance; kwargs...)
     return instance
 end
 
@@ -224,6 +247,7 @@ Class.slots
 class_name(Class)
 class_slots(Class)
 
+
 function class_direct_slots(classe::class) 
     classe.direct_slots
 end
@@ -235,9 +259,13 @@ end
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
+println(ComplexNumber)
 c2 = new(ComplexNumber, real=3, imag=4)
+println(ComplexNumber)
 
-
+for classe in instance_registry
+    println(classe)
+end
 
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
@@ -282,12 +310,20 @@ foobar1.b
 foobar1.c
 foobar1.d
 
+global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
+
+global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
+global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
+
+
+#=function class_of(classe::class)
+    return classe
+end=#
 
 global Shape = defclass(:Shape, [], [])
 global Device = defclass(:Device, [], [])
 
 #global CountingClass = defclass(:CountingClass, [Class], [counter=0])
-global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
 #global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
 
 global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
@@ -301,10 +337,6 @@ global Line = defclass(:Line, [Shape], [:from, :to])
 
 global Screen = defclass(:Screen, [Device], [])
 global Printer = defclass(:Printer, [Device], [])
-
-#global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
-
-#global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
 
 #global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
 
