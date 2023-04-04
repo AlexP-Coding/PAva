@@ -122,6 +122,21 @@ function new(classe::class; kwargs...)
     return classe
 end
 
+function compute_slots(classe::class)
+    all_slots = Vector{Symbol}()
+    append!(all_slots, keys(getfield(classe, :direct_slots)))
+
+    # search in superclasses for slots, TODO: in assignment says it should go to cpl, not direct_superclass
+    if(!isempty(getfield(classe, :direct_superclasses)))
+        for superclass in getfield(classe, :direct_superclasses)
+            if superclass != Object
+                append!(all_slots, keys(getfield(superclass, :direct_slots)))
+            end
+        end
+    end
+    return println(all_slots)
+end
+
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
         if(classe == Class)
@@ -129,16 +144,7 @@ function Base.getproperty(classe::class, slot::Symbol)
         
         else # TODO: or GenericFunction or MultiMethod
             
-            all_slots = Vector{Symbol}()
-            # search in superclasses for slots
-            if(!isempty(getfield(classe, :direct_superclasses)))
-                for superclass in getfield(classe, :direct_superclasses)
-                    if superclass != Object
-                        append!(all_slots, keys(getfield(superclass, :direct_slots)))
-                    end
-                end
-            end
-            return println(append!(all_slots, keys(getfield(classe, :direct_slots))))
+            return compute_slots(classe)
         end
     end
 
@@ -165,6 +171,7 @@ function Base.getproperty(classe::class, slot::Symbol)
     end
 
     if haskey(getfield(classe, :direct_slots), slot)
+        println("entrei")
         return getfield(classe, :direct_slots)[slot]
     end
 
@@ -206,9 +213,6 @@ end
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
-global Shape = defclass(:Shape, [], [])
-global Device = defclass(:Device, [], [])
-
 c1 = new(ComplexNumber, real=1, imag=2)
 
 ComplexNumber.name
@@ -236,6 +240,25 @@ class_direct_slots(ColoredCircle)
 class_slots(ColoredCircle)
 class_direct_superclasses(ColoredCircle)
 
+# class hierarchy
+ColoredCircle.direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+
+global Foo = defclass(:Foo, [], [:a, :b])
+global Bar = defclass(:Bar, [], [:b, :c])
+global FooBar = defclass(:FooBar, [Foo, Bar], [:a, :d])
+class_slots(FooBar)
+
+foobar1 = new(FooBar)
+
+#foobar1.a
+
+
+global Shape = defclass(:Shape, [], [])
+global Device = defclass(:Device, [], [])
+
 #global CountingClass = defclass(:CountingClass, [Class], [counter=0])
 global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
 global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
@@ -247,9 +270,9 @@ global Line = defclass(:Line, [Shape], [:from, :to])
 global Screen = defclass(:Screen, [Device], [])
 global Printer = defclass(:Printer, [Device], [])
 
-global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
+#global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
 
-global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
+#global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
 
 #global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
 
