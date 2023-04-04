@@ -14,7 +14,6 @@ struct class
     metaclass::Union{class, Nothing}
 
     function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), metaclass=nothing)
-        println(metaclass)
         new(name, direct_superclasses, direct_slots, metaclass)
     end
 end
@@ -118,7 +117,10 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     return new_classe
 end
 
-
+#= in assignment is obj::Object
+function print_object(obj::class, io::IO)
+    println(io, "<$(class_name(class_of(obj))) $(string(objectid(obj), base=62))>")
+end=#
 
 function Base.copy(m::class)
     return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), getfield(m, :metaclass))
@@ -135,8 +137,25 @@ function allocate_instance(classe::class)
     return instance
 end
 
-function compute_cpl(classe::class)
-
+function compute_cpl(c::class)
+    cpl = Vector{class}()
+    queue = [c]
+    visited = Set{class}(queue)
+    while !isempty(queue)
+        current = popfirst!(queue)
+        push!(cpl, current)
+        for superclass in current.direct_superclasses
+            if(superclass != Object)
+                if !(superclass in visited)
+                    push!(queue, superclass)
+                    push!(visited, superclass)
+                end
+            end
+        end
+    end
+    push!(cpl, Object)
+    push!(cpl, Top)
+    return cpl
 end
 
 function initialize(classe::class; kwargs...)
@@ -255,6 +274,15 @@ end
 function class_direct_superclasses(classe::class) 
     classe.direct_superclasses
 end
+
+global A = defclass(:A, [], [])
+global B = defclass(:B, [], [])
+global C = defclass(:C, [], [])
+global D = defclass(:D, [A, B], [])
+global E = defclass(:E, [A, C], [])
+global F = defclass(:F, [D, E], [])
+
+compute_cpl(F)
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
