@@ -9,12 +9,12 @@ struct class
     name::Symbol
     direct_superclasses::Vector{class}
     direct_slots::Dict{Symbol, Any}
-    #class_precedence_list::Vector{class}
+    class_precedence_list::Vector{class}
     #effective_slots::Dict{Symbol, Any}
     metaclass::Union{class, Nothing}
 
-    function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), metaclass=nothing)
-        new(name, direct_superclasses, direct_slots, metaclass)
+    function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), class_precedence_list=[], metaclass=nothing)
+        new(name, direct_superclasses, direct_slots, class_precedence_list, metaclass)
     end
 end
 
@@ -109,9 +109,9 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     end
 
     if haskey(kwargs, :metaclass)
-        new_classe = class(name, new_superclasses, slots_dict, kwargs[:metaclass])
+        new_classe = class(name, new_superclasses, slots_dict, [], kwargs[:metaclass])
     else
-        new_classe = class(name, new_superclasses, slots_dict)
+        new_classe = class(name, new_superclasses, slots_dict, [])
     end
     #class_registry[name] = new_classe
     return new_classe
@@ -123,16 +123,11 @@ function print_object(obj::class, io::IO)
 end=#
 
 function Base.copy(m::class)
-    return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), getfield(m, :metaclass))
+    return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
 end
 
 function allocate_instance(classe::class)
-    #instance_registry[getfield(classe, :name)] = classe
-    println("allocate_instance:")
-    println(classe)
-    #instance = class(getfield(classe, :name), getfield(classe, :direct_superclasses), getfield(classe, :direct_slots), getfield(classe, :metaclass))
     instance = copy(classe)
-
     push!(instance_registry, instance)
     return instance
 end
@@ -164,7 +159,10 @@ function initialize(classe::class; kwargs...)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
         end
     end
-    compute_cpl(classe)
+    cpl = compute_cpl(classe)
+    #setfield!(classe, :class_precedence_list, compute_cpl(classe))
+    append!(getfield(classe, :class_precedence_list), cpl)
+    println("cpl: ", getfield(classe, :class_precedence_list)) #problem: class[#= circular reference @-2 =#]
 end
 
 function new(classe::class; kwargs...)
