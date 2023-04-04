@@ -170,10 +170,22 @@ function Base.getproperty(classe::class, slot::Symbol)
         end
     end
 
+    # slot is a slot
+    #search in superclasses for slots
+    if (!isempty(getfield(classe, :direct_superclasses)))
+        for superclass in getfield(classe, :direct_superclasses)
+            if superclass != Object
+                if (haskey(getfield(superclass, :direct_slots), slot))
+                    return getfield(superclass, :direct_slots)[slot]
+                end
+            end
+        end
+    end
+
     if haskey(getfield(classe, :direct_slots), slot)
-        println("entrei")
         return getfield(classe, :direct_slots)[slot]
     end
+    
 
     error("$(classe.name) does not have slot $slot")
 end
@@ -246,23 +258,31 @@ ans[1].direct_superclasses
 ans[1].direct_superclasses
 ans[1].direct_superclasses
 
-global Foo = defclass(:Foo, [], [:a, :b])
-global Bar = defclass(:Bar, [], [:b, :c])
-global FooBar = defclass(:FooBar, [Foo, Bar], [:a, :d])
+global Foo = defclass(:Foo, [], [:a => 1, :b => 2])
+global Bar = defclass(:Bar, [], [:b => 3, :c => 4])
+global FooBar = defclass(:FooBar, [Foo, Bar], [:a => 5, :d => 6])
 class_slots(FooBar)
 
 foobar1 = new(FooBar)
 
-#foobar1.a
+foobar1.a
+foobar1.b
+foobar1.c
+foobar1.d
 
 
 global Shape = defclass(:Shape, [], [])
 global Device = defclass(:Device, [], [])
 
 #global CountingClass = defclass(:CountingClass, [Class], [counter=0])
-global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
+global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
+#global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
+
+global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
 global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
 
+#global Foo = defclass(:Foo, [], [[:foo, :reader => :get_foo, :writer => :set_foo!, :initform => 123]])
+global Foo = defclass(:Foo, [], [[:foo => 123, :reader => :get_foo, :writer => :set_foo!]])
 
 global Line = defclass(:Line, [Shape], [:from, :to])
 #global Circle = defclass(:Circle, [Shape], [:center, :radius])
