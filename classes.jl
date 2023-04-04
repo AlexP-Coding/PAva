@@ -29,8 +29,8 @@ struct multiMethod
     generic_function::genericFunction
 end
 
-# global dictionary to keep track of defined classes
-#class_registry = Dict{Symbol, class}()
+# global dictionary to keep track of instances
+instance_registry = Dict{Symbol, class}()
 
 # root of class hierarchy
 global Top = class(:Top, [], Dict())
@@ -112,14 +112,23 @@ function defclass(name::Symbol, direct_superclasses, direct_slots)
     return new_classe
 end
 
-function new(classe::class; kwargs...)
-    #class_obj = class_registry[classe]
+function allocate_instance(classe::class)
+    instance_registry[getfield(classe, :name)] = classe
+    return classe
+end
+
+function initialize(classe::class; kwargs...)
     for (slot, value) in getfield(classe, :direct_slots)
         if haskey(kwargs, slot)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
         end
     end
-    return classe
+end
+
+function new(classe::class; kwargs...)
+    instance = allocate_instance(classe)
+    initialize(classe; kwargs...)
+    return instance
 end
 
 function compute_slots(classe::class)
@@ -226,6 +235,9 @@ end
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
+c2 = new(ComplexNumber, real=3, imag=4)
+
+
 
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
