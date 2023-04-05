@@ -159,15 +159,13 @@ function initialize(classe::class; kwargs...)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
         end
     end
-    cpl = compute_cpl(classe)
-    #setfield!(classe, :class_precedence_list, compute_cpl(classe))
-    append!(getfield(classe, :class_precedence_list), cpl)
-    println("cpl: ", getfield(classe, :class_precedence_list)) #problem: class[#= circular reference @-2 =#]
 end
 
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     initialize(instance; kwargs...)
+    cpl = compute_cpl(classe)
+    append!(getfield(instance, :class_precedence_list), cpl)
     return instance
 end
 
@@ -339,6 +337,9 @@ foobar1.d
 global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
 
 global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
+Foo.direct_superclasses
+getfield(Foo, :metaclass)
+
 global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
 
 
