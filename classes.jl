@@ -18,15 +18,15 @@ struct class
     end
 end
 
-struct genericFunction
-    name::Symbol
-    methods::Vector{multiMethod}
-end
-
 struct multiMethod
     specializers::Vector{class}
     procedure::Vector{Any}
-    generic_function::genericFunction
+    generic_function::Symbol
+end
+
+struct genericFunction
+    name::Symbol
+    methods::Vector{multiMethod}
 end
 
 # global dictionary to keep track of instances
@@ -220,6 +220,16 @@ function Base.getproperty(classe::class, slot::Symbol)
         end
     end
 
+    if slot == :class_precedence_list
+        if isdefined(classe, slot)
+            classes = []
+            for c in getfield(classe, :($slot))
+                push!(classes, c)
+            end
+            return classes
+        end
+    end
+
     # slot is a slot
     #search in superclasses for slots
     if (!isempty(getfield(classe, :direct_superclasses)))
@@ -249,8 +259,9 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
     return getfield(classe, :direct_slots)[slot]
 end
 
-function print_object(classe::class, io::IO)
-    print(io, "<$(class_name(class_of(classe))) $(class_name(class))>")
+function print_object(classe::class)
+    println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+    return classe
 end
 
 global Class = defclass(:Class, [], [])
@@ -272,6 +283,10 @@ class_slots(Class)
 
 function class_direct_slots(classe::class) 
     classe.direct_slots
+end
+
+function class_cpl(classe::class) 
+    classe.class_precedence_list
 end
 
 function class_direct_superclasses(classe::class) 
@@ -308,14 +323,14 @@ const BUILTIN_CLASSES = Dict(
 )
 
 function class_of(x)
-    if x isa class
+    if x == Class
+        return Class
+    elseif x isa class
         cpl = getfield(x, :class_precedence_list)
         if !isempty(cpl)
-            #print_object(x, io)
-            return cpl[1]
+            return print_object(cpl[1])
         else
-            #print_object(x, io)
-            return Class
+            return print_object(Class)
         end
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
@@ -327,14 +342,16 @@ function class_of(x)
     end
 end
 
+ComplexNumber
+
 class_of(c1) === ComplexNumber
 class_of(c1)
+class_of(class_of(c1))
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
 
 class_of(1)
 class_of("Foo")
-
 
 for classe in instance_registry
     println(classe)
