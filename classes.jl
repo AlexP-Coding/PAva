@@ -109,6 +109,8 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     end
 
     if haskey(kwargs, :metaclass)
+        # a metaclass was received
+        # name becames the metaclass name??
         new_classe = class(name, new_superclasses, slots_dict, [], kwargs[:metaclass])
     else
         new_classe = class(name, new_superclasses, slots_dict, [])
@@ -148,6 +150,7 @@ function compute_cpl(c::class)
             end
         end
     end
+    # in case is a special metaClass?! TODO
     push!(cpl, Object)
     push!(cpl, Top)
     return cpl
@@ -246,6 +249,10 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
     return getfield(classe, :direct_slots)[slot]
 end
 
+function print_object(classe::class, io::IO)
+    print(io, "<$(class_name(class_of(classe))) $(class_name(class))>")
+end
+
 global Class = defclass(:Class, [], [])
 
 function class_name(classe::class) 
@@ -286,6 +293,48 @@ c1 = new(ComplexNumber, real=1, imag=2)
 println(ComplexNumber)
 c2 = new(ComplexNumber, real=3, imag=4)
 println(ComplexNumber)
+
+# built-in class
+global BuiltInClass = class(:BuiltInClass, [Top], Dict())
+_Int64 = new(BuiltInClass)
+compute_cpl(_Int64) # wrong should be: builtinclass, top
+_Float64 = new(BuiltInClass)
+_String = new(BuiltInClass)
+
+const BUILTIN_CLASSES = Dict(
+    Int => _Int64,
+    Float64 => _Float64,
+    String => _String,
+)
+
+function class_of(x)
+    if x isa class
+        cpl = getfield(x, :class_precedence_list)
+        if !isempty(cpl)
+            #print_object(x, io)
+            return cpl[1]
+        else
+            #print_object(x, io)
+            return Class
+        end
+    else
+        special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
+        if special_name === nothing
+            error("No class found for type $(typeof(x))")
+        end
+        cpl = getfield(special_name, :class_precedence_list)
+        return cpl[1]
+    end
+end
+
+class_of(c1) === ComplexNumber
+class_of(c1)
+class_of(class_of(c1)) === Class
+class_of(class_of(class_of(c1))) === Class
+
+class_of(1)
+class_of("Foo")
+
 
 for classe in instance_registry
     println(classe)
