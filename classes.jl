@@ -260,14 +260,16 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
 end
 
 function print_object(classe::class)
-    println("<$(class_name(class_of(classe))) $(class_name(classe))>")
-    return classe
+    println("inside print_object")
+    return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+    # return classe
+    # return "<$(class_name(class_of(classe))) $(class_name(classe))>"
 end
 
 global Class = defclass(:Class, [], [])
 
 function class_name(classe::class) 
-    classe.name
+    getfield(classe, :name)
 end
 
 function class_slots(classe::class) 
@@ -328,9 +330,9 @@ function class_of(x)
     elseif x isa class
         cpl = getfield(x, :class_precedence_list)
         if !isempty(cpl)
-            return print_object(cpl[1])
+            return cpl[1]
         else
-            return print_object(Class)
+            return Class
         end
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
@@ -342,11 +344,23 @@ function class_of(x)
     end
 end
 
-ComplexNumber
+function Base.show(io::IO, classe::class)
+    println("inside show")
+    return print_object(classe)
+end
+
+println("hello")
+print_object(c1)
+
+println("ddnsdfhello")
+println(ComplexNumber)
 
 class_of(c1) === ComplexNumber
-class_of(c1)
-class_of(class_of(c1))
+
+println("hello")
+println(class_of(c1))
+println("hello")
+class_of(class_of(class_of(c1)))
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
 
