@@ -46,6 +46,13 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     slots_dict = Dict()
 
     for slot in direct_slots
+        for superclass in direct_superclasses
+            for super_slot in getfield(superclass, :direct_slots)
+                if slot == super_slot.first
+                    error("Duplicated slots!")
+                end
+            end
+        end
         # only slot name is provided
         if isa(slot, Symbol)
             println("Is a symbol")
@@ -141,7 +148,7 @@ function compute_cpl(c::class)
     while !isempty(queue)
         current = popfirst!(queue)
         push!(cpl, current)
-        for superclass in current.direct_superclasses
+        for superclass in getfield(current, :direct_superclasses)
             if(superclass != Object)
                 if !(superclass in visited)
                     push!(queue, superclass)
@@ -157,6 +164,13 @@ function compute_cpl(c::class)
 end
 
 function initialize(classe::class; kwargs...)
+    for super_class in getfield(classe, :direct_superclasses)
+        for super_slot in getfield(super_class, :direct_slots)
+            if haskey(kwargs, super_slot.first)
+                getfield(super_class, :direct_slots)[super_slot.first] = kwargs[super_slot.first]
+            end
+        end
+    end
     for (slot, value) in getfield(classe, :direct_slots)
         if haskey(kwargs, slot)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
@@ -277,14 +291,18 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
 end
 
 function print_object(classe::class)
-    println("<$(class_name(class_of(classe))) $(class_name(classe))>")
-    return classe
+    if getfield(classe, :metaclass) !== nothing
+        return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
+    else
+        return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+    end
 end
+
 
 global Class = defclass(:Class, [], [])
 
 function class_name(classe::class) 
-    classe.name
+    getfield(classe, :name)
 end
 
 function class_slots(classe::class) 
@@ -310,15 +328,6 @@ function class_direct_superclasses(classe::class)
     classe.direct_superclasses
 end
 
-global A = defclass(:A, [], [])
-global B = defclass(:B, [], [])
-global C = defclass(:C, [], [])
-global D = defclass(:D, [A, B], [])
-global E = defclass(:E, [A, C], [])
-global F = defclass(:F, [D, E], [])
-
-compute_cpl(F)
-
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
@@ -340,15 +349,23 @@ const BUILTIN_CLASSES = Dict(
 )
 
 function class_of(x)
+    # println("inside class_of")
     if x == Class
         return Class
     elseif x isa class
         cpl = getfield(x, :class_precedence_list)
+        # println(cpl(getfield(x, :class_precedence_list)))
+        # println(cpl)
+        # if length(cpl) != 0
         if !isempty(cpl)
-            return print_object(cpl[1])
+            # x2 = cpl[1]
+            # println(string("cpl[1] x2",x2))
+            return cpl[1]
         else
-            return print_object(Class)
+            # println("cpl is empty")
+            return Class
         end
+        # end
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
         if special_name === nothing
@@ -359,11 +376,45 @@ function class_of(x)
     end
 end
 
-ComplexNumber
+function Base.show(io::IO, classe::class)
+    # println("show")
+    return print_object(classe)
+end
+
+# function Base.show(io::IO, classes::Vector{class})
+# println("show vec")
+# end
+
+global A = defclass(:A, [], [], metaclass=ComplexNumber)
+global B = defclass(:B, [], [], metaclass=ComplexNumber)
+global C = defclass(:C, [], [], metaclass=ComplexNumber)
+global D = defclass(:D, [A, B], [], metaclass=ComplexNumber)
+global E = defclass(:E, [A, C], [], metaclass=ComplexNumber)
+global F = defclass(:F, [D, E], [], metaclass=ComplexNumber)
+
+global A = defclass(:A, [], [])
+global B = defclass(:B, [], [])
+global C = defclass(:C, [], [])
+global D = defclass(:D, [A, B], [])
+global E = defclass(:E, [A, C], [])
+global F = defclass(:F, [D, E], [])
+
+compute_cpl(F)
+
+println(class_of(F))
+
+println("hello")
+print_object(c1)
+
+println("ddnsdfhello")
+println(ComplexNumber)
 
 class_of(c1) === ComplexNumber
-class_of(c1)
-class_of(class_of(c1))
+
+println("hello")
+println(class_of(c1))
+println("hello")
+class_of(class_of(class_of(c1)))
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
 
@@ -459,6 +510,15 @@ global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!
 [:age, reader=get_age, writer=set_age!, initform=0],
 [:friend, reader=get_friend, writer=set_friend!]],
 metaclass=UndoableClass)
+
+global Person = defclass(:Person, [], [:nome])
+global Student = defclass(:Student, [Person], [:id])
+
+s1 = new(Student, nome="Joao", id=1)
+getproperty(s1, :nome)
+println(s1)
+s1.nome
+s1.id
 
 #global GenericFunction = defgeneric(:GenericFunction, [])
 #global MultiMethod = defmethod([], [], )
