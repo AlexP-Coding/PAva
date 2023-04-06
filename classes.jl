@@ -138,6 +138,9 @@ function compute_cpl(c::class)
     cpl = Vector{class}()
     queue = [c]
     visited = Set{class}(queue)
+    if getfiled(c, :metaclasse) != Nothing
+        push!(cpl, getfield(c, :metaclasse))
+    end
     while !isempty(queue)
         current = popfirst!(queue)
         push!(cpl, current)
@@ -260,11 +263,11 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
 end
 
 function print_object(classe::class)
-    println("inside print_object")
     return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
     # return classe
     # return "<$(class_name(class_of(classe))) $(class_name(classe))>"
 end
+
 
 global Class = defclass(:Class, [], [])
 
@@ -345,9 +348,17 @@ function class_of(x)
 end
 
 function Base.show(io::IO, classe::class)
-    println("inside show")
     return print_object(classe)
 end
+
+global A = defclass(:A, [], [], metaclass=ComplexNumber)
+global B = defclass(:B, [], [], metaclass=ComplexNumber)
+global C = defclass(:C, [], [], metaclass=ComplexNumber)
+global D = defclass(:D, [A, B], [], metaclass=ComplexNumber)
+global E = defclass(:E, [A, C], [], metaclass=ComplexNumber)
+global F = defclass(:F, [D, E], [], metaclass=ComplexNumber)
+
+compute_cpl(F)
 
 println("hello")
 print_object(c1)
