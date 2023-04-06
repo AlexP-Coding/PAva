@@ -219,17 +219,19 @@ end
 #global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
 #compute_slots(FooBar)
 
-function Base.getproperty(classe::genericFunction, slot::Symbol)
-    println("entrei2")
-    if (classe == GenericFunction)
-        return println(collect(fieldnames(genericFunction)))
-    elseif (classe == MultiMethod)
+function Base.getproperty(mm::multiMethod, slot::Symbol)
+    if (mm == MultiMethod)
         return println(collect(fieldnames(multiMethod)))
     end
 end
 
+function Base.getproperty(gf::genericFunction, slot::Symbol)
+    if (gf == GenericFunction)
+        return println(collect(fieldnames(genericFunction)))
+    end
+end
+
 function Base.getproperty(classe::class, slot::Symbol)
-    println("entrei")
     if slot == :slots
         if(classe == Class)
             return println(collect(fieldnames(class)))
@@ -367,6 +369,9 @@ Class.slots
 
 global GenericFunction = genericFunction(:GenericFunction, [])
 GenericFunction.slots
+
+global MultiMethod = multiMethod([], [], :ola)
+MultiMethod.slots
 
 class_name(Class)
 class_slots(Class)
