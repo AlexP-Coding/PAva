@@ -187,6 +187,38 @@ function compute_slots(classe::class)
     return println(all_slots)
 end
 
+function compute_slots3(classe:: class)
+    all_slots = Vector{Symbol}()
+    append!(all_slots, keys(getfield(classe, :direct_slots)))
+    cpl = compute_cpl(classe)
+    println("Printing CPL:")
+    println(cpl)
+
+    for superclass in cpl
+        println(superclass)
+        sc_name = getfield(superclass, :name)
+        println(sc_name)
+        if sc_name != Object && sc_name != Top
+            println(sc_name in all_slots)
+            keys2 = keys(getfield(superclass, :direct_slots))
+            for key in keys2
+                if !(key in all_slots)
+                    append!(all_slots, keys2)
+                end
+            end
+        end
+    end
+
+    println("Printing all slots:")
+    println(all_slots)
+    return all_slots
+end
+
+global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
+global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
+global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
+compute_slots3(FooBar)
+
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
         if(classe == Class)
