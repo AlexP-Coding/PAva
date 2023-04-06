@@ -138,9 +138,6 @@ function compute_cpl(c::class)
     cpl = Vector{class}()
     queue = [c]
     visited = Set{class}(queue)
-    if getfiled(c, :metaclasse) != Nothing
-        push!(cpl, getfield(c, :metaclasse))
-    end
     while !isempty(queue)
         current = popfirst!(queue)
         push!(cpl, current)
@@ -263,9 +260,11 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
 end
 
 function print_object(classe::class)
-    return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
-    # return classe
-    # return "<$(class_name(class_of(classe))) $(class_name(classe))>"
+    if getfield(classe, :metaclass) !== nothing
+        return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
+    else
+        return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+    end
 end
 
 
@@ -297,15 +296,6 @@ end
 function class_direct_superclasses(classe::class) 
     classe.direct_superclasses
 end
-
-global A = defclass(:A, [], [])
-global B = defclass(:B, [], [])
-global C = defclass(:C, [], [])
-global D = defclass(:D, [A, B], [])
-global E = defclass(:E, [A, C], [])
-global F = defclass(:F, [D, E], [])
-
-compute_cpl(F)
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
@@ -358,7 +348,16 @@ global D = defclass(:D, [A, B], [], metaclass=ComplexNumber)
 global E = defclass(:E, [A, C], [], metaclass=ComplexNumber)
 global F = defclass(:F, [D, E], [], metaclass=ComplexNumber)
 
+global A = defclass(:A, [], [])
+global B = defclass(:B, [], [])
+global C = defclass(:C, [], [])
+global D = defclass(:D, [A, B], [])
+global E = defclass(:E, [A, C], [])
+global F = defclass(:F, [D, E], [])
+
 compute_cpl(F)
+
+println(class_of(F))
 
 println("hello")
 print_object(c1)
