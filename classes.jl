@@ -164,6 +164,13 @@ function compute_cpl(c::class)
 end
 
 function initialize(classe::class; kwargs...)
+    for super_class in getfield(classe, :direct_superclasses)
+        for super_slot in getfield(super_class, :direct_slots)
+            if haskey(kwargs, super_slot.first)
+                getfield(super_class, :direct_slots)[super_slot.first] = kwargs[super_slot.first]
+            end
+        end
+    end
     for (slot, value) in getfield(classe, :direct_slots)
         if haskey(kwargs, slot)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
@@ -487,14 +494,14 @@ global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!
 [:friend, reader=get_friend, writer=set_friend!]],
 metaclass=UndoableClass)
 
-
-
 global Person = defclass(:Person, [], [:nome])
-global Student = defclass(:Student, [Person], [:nome, :id])
+global Student = defclass(:Student, [Person], [:id])
 
 s1 = new(Student, nome="Joao", id=1)
 getproperty(s1, :nome)
 println(s1)
+s1.nome
+s1.id
 
 #global GenericFunction = defgeneric(:GenericFunction, [])
 #global MultiMethod = defmethod([], [], )
