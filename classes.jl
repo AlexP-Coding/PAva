@@ -199,10 +199,10 @@ function compute_slots(classe:: class)
     return all_slots
 end
 
-global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
-global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
-global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
-compute_slots(FooBar)
+#global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
+#global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
+#global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
+#compute_slots(FooBar)
 
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
