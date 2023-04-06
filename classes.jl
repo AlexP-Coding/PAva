@@ -172,21 +172,6 @@ function new(classe::class; kwargs...)
     return instance
 end
 
-#function compute_slots(classe::class)
-#    all_slots = Vector{Symbol}()
-#    append!(all_slots, keys(getfield(classe, :direct_slots)))
-#
-#    # search in superclasses for slots, TODO: in assignment says it should go to cpl, not direct_superclass
-#    if(!isempty(getfield(classe, :direct_superclasses)))
-#        for superclass in getfield(classe, :direct_superclasses)
-#            if superclass != Object
-#                append!(all_slots, keys(getfield(superclass, :direct_slots)))
-#            end
-#        end
-#    end
-#    return println(all_slots)
-#end
-
 function compute_slots(classe:: class)
     all_slots = Vector{Symbol}()
     append!(all_slots, keys(getfield(classe, :direct_slots)))
