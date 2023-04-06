@@ -172,20 +172,37 @@ function new(classe::class; kwargs...)
     return instance
 end
 
-function compute_slots(classe::class)
+function compute_slots(classe:: class)
     all_slots = Vector{Symbol}()
     append!(all_slots, keys(getfield(classe, :direct_slots)))
+    cpl = compute_cpl(classe)
+    println("Printing CPL:")
+    println(cpl)
 
-    # search in superclasses for slots, TODO: in assignment says it should go to cpl, not direct_superclass
-    if(!isempty(getfield(classe, :direct_superclasses)))
-        for superclass in getfield(classe, :direct_superclasses)
-            if superclass != Object
-                append!(all_slots, keys(getfield(superclass, :direct_slots)))
+    for superclass in cpl
+        println(superclass)
+        sc_name = getfield(superclass, :name)
+        println(sc_name)
+        if sc_name != Object && sc_name != Top
+            println(sc_name in all_slots)
+            sc_keys = keys(getfield(superclass, :direct_slots))
+            for key in sc_keys
+                if !(key in all_slots) && !(key in keys(getfield(classe, :direct_slots)))
+                    append!(all_slots, [key])
+                end
             end
         end
     end
-    return println(all_slots)
+
+    println("Printing all slots:")
+    println(all_slots)
+    return all_slots
 end
+
+#global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
+#global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
+#global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
+#compute_slots(FooBar)
 
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
