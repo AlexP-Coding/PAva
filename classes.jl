@@ -123,6 +123,7 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
         new_classe = class(name, new_superclasses, slots_dict, [])
     end
     #class_registry[name] = new_classe
+    println("estou aqui")
     return new_classe
 end
 
@@ -218,13 +219,21 @@ end
 #global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
 #compute_slots(FooBar)
 
+function Base.getproperty(classe::genericFunction, slot::Symbol)
+    println("entrei2")
+    if (classe == GenericFunction)
+        return println(collect(fieldnames(genericFunction)))
+    elseif (classe == MultiMethod)
+        return println(collect(fieldnames(multiMethod)))
+    end
+end
+
 function Base.getproperty(classe::class, slot::Symbol)
+    println("entrei")
     if slot == :slots
         if(classe == Class)
             return println(collect(fieldnames(class)))
-        
-        else # TODO: or GenericFunction or MultiMethod
-            
+        else
             return compute_slots(classe)
         end
     end
@@ -298,55 +307,10 @@ function print_object(classe::class)
     end
 end
 
-
-global Class = defclass(:Class, [], [])
-
-function class_name(classe::class) 
-    getfield(classe, :name)
+function Base.show(io::IO, classe::class)
+    # println("show")
+    return print_object(classe)
 end
-
-function class_slots(classe::class) 
-    classe.slots
-end
-
-Class.name
-Class.slots
-
-class_name(Class)
-class_slots(Class)
-
-
-function class_direct_slots(classe::class) 
-    classe.direct_slots
-end
-
-function class_cpl(classe::class) 
-    classe.class_precedence_list
-end
-
-function class_direct_superclasses(classe::class) 
-    classe.direct_superclasses
-end
-
-global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
-
-c1 = new(ComplexNumber, real=1, imag=2)
-println(ComplexNumber)
-c2 = new(ComplexNumber, real=3, imag=4)
-println(ComplexNumber)
-
-# built-in class
-global BuiltInClass = class(:BuiltInClass, [Top], Dict())
-_Int64 = new(BuiltInClass)
-compute_cpl(_Int64) # wrong should be: builtinclass, top
-_Float64 = new(BuiltInClass)
-_String = new(BuiltInClass)
-
-const BUILTIN_CLASSES = Dict(
-    Int => _Int64,
-    Float64 => _Float64,
-    String => _String,
-)
 
 function class_of(x)
     # println("inside class_of")
@@ -376,10 +340,56 @@ function class_of(x)
     end
 end
 
-function Base.show(io::IO, classe::class)
-    # println("show")
-    return print_object(classe)
+function class_name(classe::class) 
+    getfield(classe, :name)
 end
+
+function class_slots(classe::class) 
+    classe.slots
+end
+
+function class_direct_slots(classe::class) 
+    classe.direct_slots
+end
+
+function class_cpl(classe::class) 
+    classe.class_precedence_list
+end
+
+function class_direct_superclasses(classe::class) 
+    classe.direct_superclasses
+end
+
+global Class = defclass(:Class, [], [])
+
+Class.name
+Class.slots
+
+global GenericFunction = genericFunction(:GenericFunction, [])
+GenericFunction.slots
+
+class_name(Class)
+class_slots(Class)
+
+global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
+
+c1 = new(ComplexNumber, real=1, imag=2)
+println(ComplexNumber)
+c2 = new(ComplexNumber, real=3, imag=4)
+println(ComplexNumber)
+
+# built-in class
+global BuiltInClass = class(:BuiltInClass, [Top], Dict())
+_Int64 = new(BuiltInClass)
+compute_cpl(_Int64) # wrong should be: builtinclass, top
+_Float64 = new(BuiltInClass)
+_String = new(BuiltInClass)
+
+const BUILTIN_CLASSES = Dict(
+    Int => _Int64,
+    Float64 => _Float64,
+    String => _String,
+)
 
 # function Base.show(io::IO, classes::Vector{class})
 # println("show vec")
@@ -391,6 +401,8 @@ global C = defclass(:C, [], [], metaclass=ComplexNumber)
 global D = defclass(:D, [A, B], [], metaclass=ComplexNumber)
 global E = defclass(:E, [A, C], [], metaclass=ComplexNumber)
 global F = defclass(:F, [D, E], [], metaclass=ComplexNumber)
+
+compute_cpl(F)
 
 global A = defclass(:A, [], [])
 global B = defclass(:B, [], [])
