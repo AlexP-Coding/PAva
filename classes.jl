@@ -172,22 +172,22 @@ function new(classe::class; kwargs...)
     return instance
 end
 
-function compute_slots(classe::class)
-    all_slots = Vector{Symbol}()
-    append!(all_slots, keys(getfield(classe, :direct_slots)))
+#function compute_slots(classe::class)
+#    all_slots = Vector{Symbol}()
+#    append!(all_slots, keys(getfield(classe, :direct_slots)))
+#
+#    # search in superclasses for slots, TODO: in assignment says it should go to cpl, not direct_superclass
+#    if(!isempty(getfield(classe, :direct_superclasses)))
+#        for superclass in getfield(classe, :direct_superclasses)
+#            if superclass != Object
+#                append!(all_slots, keys(getfield(superclass, :direct_slots)))
+#            end
+#        end
+#    end
+#    return println(all_slots)
+#end
 
-    # search in superclasses for slots, TODO: in assignment says it should go to cpl, not direct_superclass
-    if(!isempty(getfield(classe, :direct_superclasses)))
-        for superclass in getfield(classe, :direct_superclasses)
-            if superclass != Object
-                append!(all_slots, keys(getfield(superclass, :direct_slots)))
-            end
-        end
-    end
-    return println(all_slots)
-end
-
-function compute_slots3(classe:: class)
+function compute_slots(classe:: class)
     all_slots = Vector{Symbol}()
     append!(all_slots, keys(getfield(classe, :direct_slots)))
     cpl = compute_cpl(classe)
@@ -200,10 +200,10 @@ function compute_slots3(classe:: class)
         println(sc_name)
         if sc_name != Object && sc_name != Top
             println(sc_name in all_slots)
-            keys2 = keys(getfield(superclass, :direct_slots))
-            for key in keys2
-                if !(key in all_slots)
-                    append!(all_slots, keys2)
+            sc_keys = keys(getfield(superclass, :direct_slots))
+            for key in sc_keys
+                if !(key in all_slots) && !(key in keys(getfield(classe, :direct_slots)))
+                    append!(all_slots, [key])
                 end
             end
         end
@@ -217,7 +217,7 @@ end
 global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
 global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
 global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
-compute_slots3(FooBar)
+compute_slots(FooBar)
 
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
