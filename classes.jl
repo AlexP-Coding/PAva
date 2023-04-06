@@ -46,6 +46,13 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     slots_dict = Dict()
 
     for slot in direct_slots
+        for superclass in direct_superclasses
+            for super_slot in getfield(superclass, :direct_slots)
+                if slot == super_slot.first
+                    error("Duplicated slots!")
+                end
+            end
+        end
         # only slot name is provided
         if isa(slot, Symbol)
             println("Is a symbol")
@@ -318,19 +325,20 @@ const BUILTIN_CLASSES = Dict(
 )
 
 function class_of(x)
-    println("inside class_of")
+    # println("inside class_of")
     if x == Class
         return Class
     elseif x isa class
         cpl = getfield(x, :class_precedence_list)
-        println(cpl)
+        # println(cpl(getfield(x, :class_precedence_list)))
+        # println(cpl)
         # if length(cpl) != 0
         if !isempty(cpl)
-            x2 = cpl[1]
-            println(string("cpl[1] x2",x2))
+            # x2 = cpl[1]
+            # println(string("cpl[1] x2",x2))
             return cpl[1]
         else
-            println("cpl is empty")
+            # println("cpl is empty")
             return Class
         end
         # end
@@ -345,7 +353,7 @@ function class_of(x)
 end
 
 function Base.show(io::IO, classe::class)
-    println("show")
+    # println("show")
     return print_object(classe)
 end
 
@@ -478,6 +486,15 @@ global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!
 [:age, reader=get_age, writer=set_age!, initform=0],
 [:friend, reader=get_friend, writer=set_friend!]],
 metaclass=UndoableClass)
+
+
+
+global Person = defclass(:Person, [], [:nome])
+global Student = defclass(:Student, [Person], [:nome, :id])
+
+s1 = new(Student, nome="Joao", id=1)
+getproperty(s1, :nome)
+println(s1)
 
 #global GenericFunction = defgeneric(:GenericFunction, [])
 #global MultiMethod = defmethod([], [], )
