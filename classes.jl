@@ -141,7 +141,7 @@ function compute_cpl(c::class)
     while !isempty(queue)
         current = popfirst!(queue)
         push!(cpl, current)
-        for superclass in current.direct_superclasses
+        for superclass in getfield(current, :direct_superclasses)
             if(superclass != Object)
                 if !(superclass in visited)
                     push!(queue, superclass)
@@ -318,15 +318,22 @@ const BUILTIN_CLASSES = Dict(
 )
 
 function class_of(x)
+    println("inside class_of")
     if x == Class
         return Class
     elseif x isa class
         cpl = getfield(x, :class_precedence_list)
+        println(cpl)
+        # if length(cpl) != 0
         if !isempty(cpl)
+            x2 = cpl[1]
+            println(string("cpl[1] x2",x2))
             return cpl[1]
         else
+            println("cpl is empty")
             return Class
         end
+        # end
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
         if special_name === nothing
@@ -338,8 +345,13 @@ function class_of(x)
 end
 
 function Base.show(io::IO, classe::class)
+    println("show")
     return print_object(classe)
 end
+
+# function Base.show(io::IO, classes::Vector{class})
+# println("show vec")
+# end
 
 global A = defclass(:A, [], [], metaclass=ComplexNumber)
 global B = defclass(:B, [], [], metaclass=ComplexNumber)
