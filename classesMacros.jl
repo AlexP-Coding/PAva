@@ -18,19 +18,31 @@ struct class
 end
 
 struct multiMethod
-    specializers::Vector{class}
-    procedure::Vector{Any}
-    generic_function::Symbol
+    specializers::Dict{Symbol, class}
+    procedure::Union{Expr, Nothing}
+    generic_function::Union{Symbol, Nothing}
+
+    function multiMethod(specializers, procedure, generic_function)
+        new(specializers, procedure, generic_function)
+    end
 end
 
 struct genericFunction
     name::Symbol
+    parameters::Vector{Symbol}
     methods::Vector{multiMethod}
+
+    function genericFunction(name::Symbol, parameters, methods=[])
+        new(name, parameters, methods)
+    end
 end
 
-# global dictionary to keep track of instances
+# global dictionary to keep track of clases
 class_registry = Dict{Symbol, class}()
+# global dictionary to keep track of instances
 instance_registry = Vector{class}()
+# global dictionary to keep track of generic functions
+generic_registry = Dict{Symbol, genericFunction}()
 
 # root of class hierarchy
 global Top = class(:Top, [], Dict())
@@ -237,15 +249,21 @@ end
 #global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
 #compute_slots(FooBar)
 
-function Base.getproperty(mm::multiMethod, slot::Symbol)
-    if (mm == MultiMethod)
+function Base.getproperty(method::multiMethod, slot::Symbol)
+    if slot == :slots
         return println(collect(fieldnames(multiMethod)))
     end
 end
 
-function Base.getproperty(gf::genericFunction, slot::Symbol)
-    if (gf == GenericFunction)
+function Base.getproperty(generic::genericFunction, slot::Symbol)
+    if slot == :slots
         return println(collect(fieldnames(genericFunction)))
+    elseif slot == :name
+        return getfield(generic, :($slot))
+    elseif slot == :methods # we can receive method[1]
+        return println(getfield(generic, :($slot)))
+    elseif slot == :parameters
+        return println(getfield(generic, :($slot)))
     end
 end
 
@@ -332,6 +350,19 @@ function Base.show(io::IO, classe::class)
     return print_object(classe)
 end
 
+function Base.show(io::IO, generic::genericFunction)
+    # println("show")
+    return print_object(generic)
+end
+
+function print_object(generic::genericFunction)
+    if generic_methods(generic) !== nothing
+        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
+    else
+        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
+    end
+end
+
 function class_of(x)
     # println("inside class_of")
     if x == Class
@@ -350,6 +381,8 @@ function class_of(x)
             return Class
         end
         # end
+    elseif x isa genericFunction
+        return GenericFunction
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
         if special_name === nothing
@@ -390,6 +423,77 @@ end
 global Class = defclass(:Class, [], [])
 class_registry[:Class] = Class
 
+# ----------------------------- generic functions ---------------------------------
+
+function defgeneric(name::Symbol, parameters)
+    println("I entered a generic function.")
+    new_generic = genericFunction(name, parameters)
+    generic_registry[name] = new_generic
+    return new_generic
+end
+
+function generic_name(generic::genericFunction)
+    getfield(generic, :name)
+end
+
+function generic_parameters(generic::genericFunction)
+    generic.parameters
+end
+
+function generic_methods(generic::genericFunction)
+    generic.methods
+end
+
+global GenericFunction = genericFunction(:GenericFunction, [], [])
+GenericFunction.slots
+
+global add = defgeneric(:add, [:a, :b])
+
+add
+class_of(add) === GenericFunction
+
+add.name
+generic_name(add)
+add.parameters
+generic_parameters(add)
+add.methods
+generic_methods(add)
+
+
+# ----------------------------- methods ---------------------------------
+
+global MultiMethod = multiMethod(Dict(), nothing, nothing)
+MultiMethod.slots
+
+function defmethod(generic_function::Symbol, parameters, specializers, procedure)
+    #if the corresponding generic function does not exist, creates
+    if !(haskey(generic_registry, generic_function))
+        generic = defgeneric(generic_function, parameters)
+    else
+        #method should have the same parameters as corresponding generic function
+        generic = generic_registry[generic_function]
+
+        if !(getfield(generic, :parameters) == parameters)
+            error("method does not have same parameters as $(generic.name)")
+        end
+    end
+
+    specializers_dict = Dict{Symbol, class}()
+
+    for (p, s) in zip(parameters, specializers)
+        specializers_dict[p] = s
+    end
+
+    new_method = multiMethod(specializers_dict, procedure, generic_function)
+
+    #add method to generic function
+    push!(getfield(generic, :methods), new_method)
+
+    return new_method
+end
+
+defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
+
 # --------------------- To test after macros -----------------------------------------------------------
 
 @defclass(ComplexNumber, [], [real, imag])
@@ -428,12 +532,6 @@ ComplexNumber.direct_superclasses == [Object]
 
 Class.name
 Class.slots
-
-global GenericFunction = genericFunction(:GenericFunction, [])
-GenericFunction.slots
-
-global MultiMethod = multiMethod([], [], :ola)
-MultiMethod.slots
 
 class_name(Class)
 class_slots(Class)
