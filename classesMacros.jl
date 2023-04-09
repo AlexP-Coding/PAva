@@ -32,7 +32,7 @@ struct genericFunction
     parameters::Vector{Symbol}
     methods::Vector{multiMethod}
 
-    function genericFunction(name::Symbol, parameters, methods=[])
+    function genericFunction(name::Symbol, parameters, methods)
         new(name, parameters, methods)
     end
 end
@@ -213,7 +213,7 @@ function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     initialize(instance; kwargs...)
     cpl = compute_cpl(classe)
-    append!(getfield(instance, :class_precedence_list), cpl)
+    append!(getfield(instance, :class_precedence_list), cpl) #acho que isto nao esta
     return instance
 end
 
@@ -228,13 +228,13 @@ function compute_slots(classe:: class)
         #println(superclass)
         sc_name = getfield(superclass, :name)
         #println(sc_name)
-        if sc_name != Object && sc_name != Top
+        if sc_name != Object && sc_name != Top && sc_name != getfield(classe, :name)
             #println(sc_name in all_slots)
             sc_keys = keys(getfield(superclass, :direct_slots))
             for key in sc_keys
-                if !(key in all_slots) && !(key in keys(getfield(classe, :direct_slots)))
+                #if !(key in keys(getfield(classe, :direct_slots)))
                     append!(all_slots, [key])
-                end
+                #end
             end
         end
     end
@@ -252,6 +252,15 @@ end
 function Base.getproperty(method::multiMethod, slot::Symbol)
     if slot == :slots
         return println(collect(fieldnames(multiMethod)))
+    elseif slot == :generic_function
+        if getfield(method, :($slot)) === nothing
+            return nothing
+        else
+            generic = generic_registry[getfield(method, :($slot))]
+            return generic
+        end
+    elseif slot == :specializers
+        return collect(values(getfield(method, :specializers)))
     end
 end
 
@@ -261,7 +270,7 @@ function Base.getproperty(generic::genericFunction, slot::Symbol)
     elseif slot == :name
         return getfield(generic, :($slot))
     elseif slot == :methods # we can receive method[1]
-        return println(getfield(generic, :($slot)))
+        return getfield(generic, :($slot))
     elseif slot == :parameters
         return println(getfield(generic, :($slot)))
     end
@@ -350,6 +359,21 @@ function Base.show(io::IO, classe::class)
     return print_object(classe)
 end
 
+function Base.show(io::IO, method::multiMethod)
+    # println("show")
+    return print_object(method)
+end
+
+function print_object(method::multiMethod)
+    specializers = [class_name(spec) for spec in method_specializers(method)]
+    spec_tuple = tuple(specializers...)
+    if method.generic_function !== nothing
+        return println("<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
+    else
+        return println("<MultiMethod>")
+    end
+end
+
 function Base.show(io::IO, generic::genericFunction)
     # println("show")
     return print_object(generic)
@@ -424,11 +448,17 @@ end
 global Class = defclass(:Class, [], [])
 class_registry[:Class] = Class
 
+Class.name
+Class.slots
+
+class_name(Class)
+class_slots(Class)
+
 # ----------------------------- generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
     println("I entered a generic function.")
-    new_generic = genericFunction(name, parameters)
+    new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
 end
@@ -460,6 +490,13 @@ generic_parameters(add)
 add.methods
 generic_methods(add)
 
+#=macro defgeneric(expr...)
+    quote
+        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end=#
+
+#@defgeneric add2(a,b)
 
 # macro definition for @defgeneric
 macro defgeneric(expr...)
@@ -492,6 +529,14 @@ generic_methods(add2)
 
 # ----------------------------- methods ---------------------------------
 
+function method_generic_function(method::multiMethod)
+    method.generic_function
+end
+
+function method_specializers(method::multiMethod)
+    method.specializers
+end
+
 global MultiMethod = multiMethod(Dict(), nothing, nothing)
 MultiMethod.slots
 
@@ -523,6 +568,11 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
 end
 
 defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
+
+add.methods[1]
+add.methods[1].generic_function === add
+add.methods[1].specializers
+
 
 # macro definition for @defmethod
 macro defmethod(expr...)
@@ -566,7 +616,6 @@ end
 @test fun_name(fun_arg1, fun_arg2) = fun_call(fun_call_args)
 # --
 
-
 # --------------------- To test after macros -----------------------------------------------------------
 
 @defclass(ComplexNumber, [], [real, imag])
@@ -598,16 +647,52 @@ ComplexNumber.direct_superclasses == [Object]
 
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
-# @defgeneric
-# @defmethod
+@defclass(A, [], [], metaclass=ComplexNumber)
+@defclass(B, [], [], metaclass=ComplexNumber)
+@defclass(C, [], [], metaclass=ComplexNumber)
+@defclass(D, [A, B], [], metaclass=ComplexNumber)
+@defclass(E, [A, C], [], metaclass=ComplexNumber)
+@defclass(F, [D, E], [], metaclass=ComplexNumber)
+
+compute_cpl(F)
+
+@defclass(A, [], [])
+@defclass(B, [], [])
+@defclass(C, [], [])
+@defclass(D, [A, B], [])
+@defclass(E, [A, C], [])
+@defclass(F, [D, E], [])
+
+compute_cpl(F)
+
+@defclass(Circle, [], [center, radius])
+@defclass(ColorMixin, [], [color])
+@defclass(ColoredCircle, [ColorMixin, Circle], [])
+class_name(Circle)
+class_direct_slots(Circle)
+class_direct_slots(ColoredCircle)
+class_slots(ColoredCircle)
+class_direct_superclasses(ColoredCircle)
+
+# class hierarchy
+ColoredCircle.direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+
+@defclass(Foo, [], [a=1, b=2])
+@defclass(Bar, [], [b=3, c=4])
+@defclass(FooBar, [Foo, Bar], [a=5, d=6])
+class_slots(FooBar)
+
+foobar1 = new(FooBar)
+
+foobar1.a
+foobar1.b
+foobar1.c
+foobar1.d
 
 # --------------------- To test before macros -----------------------------------------------------------
-
-Class.name
-Class.slots
-
-class_name(Class)
-class_slots(Class)
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
