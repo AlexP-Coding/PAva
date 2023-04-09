@@ -414,6 +414,7 @@ function class_direct_superclasses(classe::class)
 end
 
 macro defclass(expr...)
+    println(expr[1])
     #dump(expr)
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
@@ -459,6 +460,35 @@ generic_parameters(add)
 add.methods
 generic_methods(add)
 
+
+# macro definition for DEFGENERIC
+macro defgeneric(expr...)
+    # dump(expr)
+    # for arg in expr[1].args
+    #     println("arg: ", arg)
+    # end
+    quote
+        # println($expr[1].args)
+        # println("name: ", $expr[1].args[1])
+        # for arg in $expr[1].args[2:end]
+        #     println("arg: ", arg)
+        # end
+        # println($expr[1].args[1])
+        # println($expr[1].args[2:end])
+
+        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end
+
+# @defgeneric tests
+@defgeneric add2(a,b)
+
+add2.name
+generic_name(add2)
+add2.parameters
+generic_parameters(add2)
+add2.methods
+generic_methods(add2)
 
 # ----------------------------- methods ---------------------------------
 
