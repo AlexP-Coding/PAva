@@ -32,7 +32,7 @@ struct genericFunction
     parameters::Vector{Symbol}
     methods::Vector{multiMethod}
 
-    function genericFunction(name::Symbol, parameters, methods=[])
+    function genericFunction(name::Symbol, parameters, methods)
         new(name, parameters, methods)
     end
 end
@@ -213,7 +213,7 @@ function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     initialize(instance; kwargs...)
     cpl = compute_cpl(classe)
-    append!(getfield(instance, :class_precedence_list), cpl)
+    append!(getfield(instance, :class_precedence_list), cpl) #acho que isto nao esta
     return instance
 end
 
@@ -252,6 +252,15 @@ end
 function Base.getproperty(method::multiMethod, slot::Symbol)
     if slot == :slots
         return println(collect(fieldnames(multiMethod)))
+    elseif slot == :generic_function
+        if getfield(method, :($slot)) === nothing
+            return nothing
+        else
+            generic = generic_registry[getfield(method, :($slot))]
+            return generic
+        end
+    elseif slot == :specializers
+        return collect(values(getfield(method, :specializers)))
     end
 end
 
@@ -261,7 +270,7 @@ function Base.getproperty(generic::genericFunction, slot::Symbol)
     elseif slot == :name
         return getfield(generic, :($slot))
     elseif slot == :methods # we can receive method[1]
-        return println(getfield(generic, :($slot)))
+        return getfield(generic, :($slot))
     elseif slot == :parameters
         return println(getfield(generic, :($slot)))
     end
@@ -350,6 +359,21 @@ function Base.show(io::IO, classe::class)
     return print_object(classe)
 end
 
+function Base.show(io::IO, method::multiMethod)
+    # println("show")
+    return print_object(method)
+end
+
+function print_object(method::multiMethod)
+    specializers = [class_name(spec) for spec in method_specializers(method)]
+    spec_tuple = tuple(specializers...)
+    if method.generic_function !== nothing
+        return println("<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
+    else
+        return println("<MultiMethod>")
+    end
+end
+
 function Base.show(io::IO, generic::genericFunction)
     # println("show")
     return print_object(generic)
@@ -423,11 +447,17 @@ end
 global Class = defclass(:Class, [], [])
 class_registry[:Class] = Class
 
+Class.name
+Class.slots
+
+class_name(Class)
+class_slots(Class)
+
 # ----------------------------- generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
     println("I entered a generic function.")
-    new_generic = genericFunction(name, parameters)
+    new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
 end
@@ -459,8 +489,23 @@ generic_parameters(add)
 add.methods
 generic_methods(add)
 
+#=macro defgeneric(expr...)
+    quote
+        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end=#
+
+#@defgeneric add2(a,b)
 
 # ----------------------------- methods ---------------------------------
+
+function method_generic_function(method::multiMethod)
+    method.generic_function
+end
+
+function method_specializers(method::multiMethod)
+    method.specializers
+end
 
 global MultiMethod = multiMethod(Dict(), nothing, nothing)
 MultiMethod.slots
@@ -493,6 +538,10 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
 end
 
 defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
+
+add.methods[1]
+add.methods[1].generic_function === add
+add.methods[1].specializers
 
 # --------------------- To test after macros -----------------------------------------------------------
 
@@ -529,12 +578,6 @@ ComplexNumber.direct_superclasses == [Object]
 # @defmethod
 
 # --------------------- To test before macros -----------------------------------------------------------
-
-Class.name
-Class.slots
-
-class_name(Class)
-class_slots(Class)
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
