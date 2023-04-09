@@ -10,7 +10,6 @@ struct class
     direct_superclasses::Vector{class}
     direct_slots::Dict{Symbol, Any}
     class_precedence_list::Vector{class}
-    #effective_slots::Dict{Symbol, Any}
     metaclass::Union{class, Nothing}
 
     function class(name::Symbol, direct_superclasses, direct_slots=Dict{Symbol, Any}(), class_precedence_list=[], metaclass=nothing)
@@ -19,35 +18,61 @@ struct class
 end
 
 struct multiMethod
-    specializers::Vector{class}
-    procedure::Vector{Any}
-    generic_function::Symbol
+    specializers::Dict{Symbol, class}
+    procedure::Union{Expr, Nothing}
+    generic_function::Union{Symbol, Nothing}
+
+    function multiMethod(specializers, procedure, generic_function)
+        new(specializers, procedure, generic_function)
+    end
 end
 
 struct genericFunction
     name::Symbol
+    parameters::Vector{Symbol}
     methods::Vector{multiMethod}
+
+    function genericFunction(name::Symbol, parameters, methods=[])
+        new(name, parameters, methods)
+    end
 end
 
+# global dictionary to keep track of clases
+class_registry = Dict{Symbol, class}()
 # global dictionary to keep track of instances
-#instance_registry = Dict{Symbol, class}()
 instance_registry = Vector{class}()
+# global dictionary to keep track of generic functions
+generic_registry = Dict{Symbol, genericFunction}()
 
 # root of class hierarchy
 global Top = class(:Top, [], Dict())
 
 # Object is a subclass of Top; all (regular) classes inherit from Object
 global Object = class(:Object, [Top], Dict())
-#class_registry[:Object] = Object
+class_registry[:Object] = Object
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     #slots_dict = Dict(slot => nothing for slot in direct_slots)
     #println(direct_slots)
     slots_dict = Dict()
 
-    for slot in direct_slots
+    #println("name: ", name)
+    #dump(direct_slots)
+
+    if length(direct_slots) == 2
+        metaclass = direct_slots[2]
+        new_direct_slots = direct_slots[1].args
+    elseif length(direct_slots) == 1
+        new_direct_slots = direct_slots[1].args
+    elseif length(direct_slots) == 0
+        new_direct_slots = direct_slots
+    end
+
+    for slot in new_direct_slots
+        #dump(slot)
         for superclass in direct_superclasses
-            for super_slot in getfield(superclass, :direct_slots)
+            superclassClass = class_registry[superclass]
+            for super_slot in getfield(superclassClass, :direct_slots)
                 if slot == super_slot.first
                     error("Duplicated slots!")
                 end
@@ -55,47 +80,51 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
         end
         # only slot name is provided
         if isa(slot, Symbol)
-            println("Is a symbol")
+            #println("Is a symbol")
             slots_dict[slot] = nothing
         # slot name includes reader, writer or initform
-        elseif isa(slot, Vector)
-            println("Is a Vector")
-            slot_name = slot[1]
-            println(slot_name)
-            slot_options = slot[2:end]
-            println(slot_options)
+        elseif slot.head === :vect
+            #println("Is a Vector")
+            slot_name = slot.args[1]
+            #slot_name = slot[1]
+            #println(slot_name)
+            slot_options = slot.args[2:end]
+            #println(slot_options)
 
             if isa(slot_name, Symbol)
-                println("Vector slot name is a symbol")
+                #println("Vector slot name is a symbol")
+                #slots_dict[slot] = direct_slots[slot]
                 slots_dict[slot_name] = nothing
             else
-                println("Vector with Name and Value")
-                #slots_dict[slot] = direct_slots[slot]
-                slots_dict[slot_name.first] = slot_name.second
+                #println("Vector with Name and Value")
+                slots_dict[slot_name.args[1]] = slot_name.args[2]
             end
             
             for option in slot_options
+                transformed_option = Pair(option.args[1], option.args[2])
                 #if haskey(slot_options, :initform)
-                if :initform in option
-                    println("Vector slot name as initform")
+                if :initform in transformed_option
+                    #println("Vector slot name as initform")
                     #slots_dict[slot_name] = slot_options[:initform]
-                    slots_dict[slot_name] = option.second
+                    slots_dict[slot_name] = transformed_option.second
                 #if haskey(slot_options, :reader)
-                elseif :reader in option
+
+                # isso acho que passa para a macro
+                elseif :reader in transformed_option
                     println("Created a reader method")
         
-                #if haskey(slot_options, :writer)
-                elseif :writer in option
+                elseif :writer in transformed_option
                     println("Created a writer method")
                 end
             end
 
         # slot name with iniform value are provided
-        else 
-            println("Name and Value")
+        elseif isa(slot.head, Symbol)
+            #println("Name and Value")
             #slots_dict[slot] = direct_slots[slot]
             #doing it like a pair
-            slots_dict[slot.first] = slot.second
+            transformed_slot = Pair(slot.args[1], slot.args[2])
+            slots_dict[transformed_slot.first] = transformed_slot.second
         end
     end
     
@@ -106,24 +135,25 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     
     # all classes inherit, directly or indirectly from Object class
     for classe in direct_superclasses
-        #class_obj = class_registry[classe]
-        push!(new_superclasses, classe)
+        class_obj = class_registry[classe]
+        push!(new_superclasses, class_obj)
     end
 
     if !(Object in direct_superclasses)
-        #class_objet = class_registry[:Object]
-        push!(new_superclasses, Object)
+        class_objet = class_registry[:Object]
+        push!(new_superclasses, class_objet)
     end
 
-    if haskey(kwargs, :metaclass)
+    if length(direct_slots) == 2
         # a metaclass was received
         # name becames the metaclass name??
-        new_classe = class(name, new_superclasses, slots_dict, [], kwargs[:metaclass])
+        class_objet = class_registry[metaclass.args[2]]
+        new_classe = class(name, new_superclasses, slots_dict, [], class_objet)
     else
         new_classe = class(name, new_superclasses, slots_dict, [])
     end
-    #class_registry[name] = new_classe
-    println("estou aqui")
+    #println("estou aqui")
+    class_registry[name] = new_classe
     return new_classe
 end
 
@@ -191,15 +221,15 @@ function compute_slots(classe:: class)
     all_slots = Vector{Symbol}()
     append!(all_slots, keys(getfield(classe, :direct_slots)))
     cpl = compute_cpl(classe)
-    println("Printing CPL:")
-    println(cpl)
+    #println("Printing CPL:")
+    #println(cpl)
 
     for superclass in cpl
-        println(superclass)
+        #println(superclass)
         sc_name = getfield(superclass, :name)
-        println(sc_name)
+        #println(sc_name)
         if sc_name != Object && sc_name != Top
-            println(sc_name in all_slots)
+            #println(sc_name in all_slots)
             sc_keys = keys(getfield(superclass, :direct_slots))
             for key in sc_keys
                 if !(key in all_slots) && !(key in keys(getfield(classe, :direct_slots)))
@@ -209,7 +239,7 @@ function compute_slots(classe:: class)
         end
     end
 
-    println("Printing all slots:")
+    #println("Printing all slots:")
     println(all_slots)
     return all_slots
 end
@@ -219,15 +249,21 @@ end
 #global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
 #compute_slots(FooBar)
 
-function Base.getproperty(mm::multiMethod, slot::Symbol)
-    if (mm == MultiMethod)
+function Base.getproperty(method::multiMethod, slot::Symbol)
+    if slot == :slots
         return println(collect(fieldnames(multiMethod)))
     end
 end
 
-function Base.getproperty(gf::genericFunction, slot::Symbol)
-    if (gf == GenericFunction)
+function Base.getproperty(generic::genericFunction, slot::Symbol)
+    if slot == :slots
         return println(collect(fieldnames(genericFunction)))
+    elseif slot == :name
+        return getfield(generic, :($slot))
+    elseif slot == :methods # we can receive method[1]
+        return println(getfield(generic, :($slot)))
+    elseif slot == :parameters
+        return println(getfield(generic, :($slot)))
     end
 end
 
@@ -314,6 +350,19 @@ function Base.show(io::IO, classe::class)
     return print_object(classe)
 end
 
+function Base.show(io::IO, generic::genericFunction)
+    # println("show")
+    return print_object(generic)
+end
+
+function print_object(generic::genericFunction)
+    if generic_methods(generic) !== nothing
+        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
+    else
+        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
+    end
+end
+
 function class_of(x)
     # println("inside class_of")
     if x == Class
@@ -332,6 +381,8 @@ function class_of(x)
             return Class
         end
         # end
+    elseif x isa genericFunction
+        return GenericFunction
     else
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
         if special_name === nothing
@@ -362,16 +413,125 @@ function class_direct_superclasses(classe::class)
     classe.direct_superclasses
 end
 
+macro defclass(expr...)
+    #dump(expr)
+    quote
+        global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
+    end
+end
+
 global Class = defclass(:Class, [], [])
+class_registry[:Class] = Class
+
+# ----------------------------- generic functions ---------------------------------
+
+function defgeneric(name::Symbol, parameters)
+    println("I entered a generic function.")
+    new_generic = genericFunction(name, parameters)
+    generic_registry[name] = new_generic
+    return new_generic
+end
+
+function generic_name(generic::genericFunction)
+    getfield(generic, :name)
+end
+
+function generic_parameters(generic::genericFunction)
+    generic.parameters
+end
+
+function generic_methods(generic::genericFunction)
+    generic.methods
+end
+
+global GenericFunction = genericFunction(:GenericFunction, [], [])
+GenericFunction.slots
+
+global add = defgeneric(:add, [:a, :b])
+
+add
+class_of(add) === GenericFunction
+
+add.name
+generic_name(add)
+add.parameters
+generic_parameters(add)
+add.methods
+generic_methods(add)
+
+
+# ----------------------------- methods ---------------------------------
+
+global MultiMethod = multiMethod(Dict(), nothing, nothing)
+MultiMethod.slots
+
+function defmethod(generic_function::Symbol, parameters, specializers, procedure)
+    #if the corresponding generic function does not exist, creates
+    if !(haskey(generic_registry, generic_function))
+        generic = defgeneric(generic_function, parameters)
+    else
+        #method should have the same parameters as corresponding generic function
+        generic = generic_registry[generic_function]
+
+        if !(getfield(generic, :parameters) == parameters)
+            error("method does not have same parameters as $(generic.name)")
+        end
+    end
+
+    specializers_dict = Dict{Symbol, class}()
+
+    for (p, s) in zip(parameters, specializers)
+        specializers_dict[p] = s
+    end
+
+    new_method = multiMethod(specializers_dict, procedure, generic_function)
+
+    #add method to generic function
+    push!(getfield(generic, :methods), new_method)
+
+    return new_method
+end
+
+defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
+
+# --------------------- To test after macros -----------------------------------------------------------
+
+@defclass(ComplexNumber, [], [real, imag])
+
+c1 = new(ComplexNumber, real=1, imag=2)
+
+getproperty(c1, :real)
+setproperty!(c1, :imag, -1)
+
+c1.real
+c1.imag
+c1.imag += 3
+
+class_of(c1) === ComplexNumber
+ComplexNumber.direct_slots
+
+class_of(class_of(c1)) === Class
+class_of(class_of(class_of(c1))) === Class
+
+Class.slots
+ComplexNumber.name
+ComplexNumber.direct_superclasses == [Object]
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
+
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+# @defgeneric
+# @defmethod
+
+# --------------------- To test before macros -----------------------------------------------------------
 
 Class.name
 Class.slots
-
-global GenericFunction = genericFunction(:GenericFunction, [])
-GenericFunction.slots
-
-global MultiMethod = multiMethod([], [], :ola)
-MultiMethod.slots
 
 class_name(Class)
 class_slots(Class)
@@ -486,6 +646,7 @@ foobar1.c
 foobar1.d
 
 global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
+global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
 
 global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
 Foo.direct_superclasses
