@@ -461,7 +461,7 @@ add.methods
 generic_methods(add)
 
 
-# macro definition for DEFGENERIC
+# macro definition for @defgeneric
 macro defgeneric(expr...)
     # dump(expr)
     # for arg in expr[1].args
@@ -523,6 +523,49 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
 end
 
 defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
+
+# macro definition for @defmethod
+macro defmethod(expr...)
+    # dump(expr)
+    # println("generic_function: ", expr[1].args[1].args[1])
+    # # println("parameters: ", expr[1].args[1].args[2:end])
+    # # println("specializers: ", expr[1].args[1].args[2].args[2])
+    # println("procedure: ", expr[1].args[2].args[2])
+
+    fun_args = []
+    fun_args_specializers = []
+    for arg in expr[1].args[1].args[2:end]
+        # println("arg: ", arg.args[1])
+        # println("specializer: ", arg.args[2])
+        push!(fun_args, arg.args[1])
+        push!(fun_args_specializers, class_registry[arg.args[2]])
+    end
+    # println(fun_args)
+    # println(fun_args_specializers)
+
+    quote
+        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, $expr[1].args[2].args[2])
+    end
+end
+
+# tests for @defmethod
+@defclass(ComplexNumber, [], [real, imag])
+
+@defmethod add2(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
+
+
+# example on how to access different parts of the expression tree
+macro test(expr...)
+    dump(expr)
+    println("fun_name: ", expr[1].args[1].args[1])
+    println("fun_args: ", expr[1].args[1].args[2:end])
+    println("fun_call: ", expr[1].args[2].args[2].args[1])
+    println("fun_call_args: ", expr[1].args[2].args[2].args[2])
+end
+
+@test fun_name(fun_arg1, fun_arg2) = fun_call(fun_call_args)
+# --
+
 
 # --------------------- To test after macros -----------------------------------------------------------
 
