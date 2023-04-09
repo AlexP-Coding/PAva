@@ -228,13 +228,13 @@ function compute_slots(classe:: class)
         #println(superclass)
         sc_name = getfield(superclass, :name)
         #println(sc_name)
-        if sc_name != Object && sc_name != Top
+        if sc_name != Object && sc_name != Top && sc_name != getfield(classe, :name)
             #println(sc_name in all_slots)
             sc_keys = keys(getfield(superclass, :direct_slots))
             for key in sc_keys
-                if !(key in all_slots) && !(key in keys(getfield(classe, :direct_slots)))
+                #if !(key in keys(getfield(classe, :direct_slots)))
                     append!(all_slots, [key])
-                end
+                #end
             end
         end
     end
@@ -574,8 +574,50 @@ ComplexNumber.direct_superclasses == [Object]
 
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
-# @defgeneric
-# @defmethod
+@defclass(A, [], [], metaclass=ComplexNumber)
+@defclass(B, [], [], metaclass=ComplexNumber)
+@defclass(C, [], [], metaclass=ComplexNumber)
+@defclass(D, [A, B], [], metaclass=ComplexNumber)
+@defclass(E, [A, C], [], metaclass=ComplexNumber)
+@defclass(F, [D, E], [], metaclass=ComplexNumber)
+
+compute_cpl(F)
+
+@defclass(A, [], [])
+@defclass(B, [], [])
+@defclass(C, [], [])
+@defclass(D, [A, B], [])
+@defclass(E, [A, C], [])
+@defclass(F, [D, E], [])
+
+compute_cpl(F)
+
+@defclass(Circle, [], [center, radius])
+@defclass(ColorMixin, [], [color])
+@defclass(ColoredCircle, [ColorMixin, Circle], [])
+class_name(Circle)
+class_direct_slots(Circle)
+class_direct_slots(ColoredCircle)
+class_slots(ColoredCircle)
+class_direct_superclasses(ColoredCircle)
+
+# class hierarchy
+ColoredCircle.direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+ans[1].direct_superclasses
+
+@defclass(Foo, [], [a=1, b=2])
+@defclass(Bar, [], [b=3, c=4])
+@defclass(FooBar, [Foo, Bar], [a=5, d=6])
+class_slots(FooBar)
+
+foobar1 = new(FooBar)
+
+foobar1.a
+foobar1.b
+foobar1.c
+foobar1.d
 
 # --------------------- To test before macros -----------------------------------------------------------
 
