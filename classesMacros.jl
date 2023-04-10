@@ -19,12 +19,13 @@ end
 
 struct multiMethod
     specializers::Dict{Symbol, class}
-    procedure::Union{Expr, Nothing}
+    #procedure::Union{Expr, Nothing}
+    procedure::Function
     generic_function::Union{Symbol, Nothing}
 
-    function multiMethod(specializers, procedure, generic_function)
-        new(specializers, procedure, generic_function)
-    end
+    #function multiMethod(specializers, procedure, generic_function)
+    #    new(specializers, procedure, generic_function)
+    #end
 end
 
 struct genericFunction
@@ -50,6 +51,9 @@ global Top = class(:Top, [], Dict())
 # Object is a subclass of Top; all (regular) classes inherit from Object
 global Object = class(:Object, [Top], Dict())
 class_registry[:Object] = Object
+
+# built-in class
+global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     #slots_dict = Dict(slot => nothing for slot in direct_slots)
@@ -188,7 +192,7 @@ function compute_cpl(c::class)
             end
         end
     end
-    # in case is a special metaClass?! TODO
+
     push!(cpl, Object)
     push!(cpl, Top)
     return cpl
@@ -211,9 +215,11 @@ end
 
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
-    initialize(instance; kwargs...)
-    cpl = compute_cpl(classe)
-    append!(getfield(instance, :class_precedence_list), cpl) #acho que isto nao esta
+    if getfield(classe, :name) != BuiltInClass
+        initialize(instance; kwargs...)
+        cpl = compute_cpl(classe)
+        append!(getfield(instance, :class_precedence_list), cpl) #acho que isto nao esta
+    end
     return instance
 end
 
@@ -387,6 +393,16 @@ function print_object(generic::genericFunction)
     end
 end
 
+_Int64 = new(BuiltInClass)
+_Float64 = new(BuiltInClass)
+_String = new(BuiltInClass)
+
+const BUILTIN_CLASSES = Dict(
+    Int => _Int64,
+    Float64 => _Float64,
+    String => _String,
+)
+
 function class_of(x)
     # println("inside class_of")
     if x == Class
@@ -412,8 +428,7 @@ function class_of(x)
         if special_name === nothing
             error("No class found for type $(typeof(x))")
         end
-        cpl = getfield(special_name, :class_precedence_list)
-        return cpl[1]
+        return BuiltInClass
     end
 end
 
@@ -478,7 +493,17 @@ end
 global GenericFunction = genericFunction(:GenericFunction, [], [])
 GenericFunction.slots
 
-global add = defgeneric(:add, [:a, :b])
+# macro definition for @defgeneric
+macro defgeneric(expr...)
+    quote
+        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end
+
+#global add = defgeneric(:add, [:a, :b])
+
+# @defgeneric tests
+@defgeneric add(a, b)
 
 add
 class_of(add) === GenericFunction
@@ -490,42 +515,47 @@ generic_parameters(add)
 add.methods
 generic_methods(add)
 
-#=macro defgeneric(expr...)
-    quote
-        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
-    end
-end=#
+# generic function call
+(x::genericFunction)(args...) = generic_call(x, args)
 
-#@defgeneric add2(a,b)
+function generic_call(generic::genericFunction, args)
+    @assert length(args) == length(getfield(generic, :parameters))
 
-# macro definition for @defgeneric
-macro defgeneric(expr...)
-    # dump(expr)
-    # for arg in expr[1].args
-    #     println("arg: ", arg)
-    # end
-    quote
-        # println($expr[1].args)
-        # println("name: ", $expr[1].args[1])
-        # for arg in $expr[1].args[2:end]
-        #     println("arg: ", arg)
-        # end
-        # println($expr[1].args[1])
-        # println($expr[1].args[2:end])
+    methods = select_applicable_methods(generic, args)
 
-        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    if !no_applicable_method(generic, methods, args)
+        println("ola2")
+    else
+        return
     end
 end
 
-# @defgeneric tests
-@defgeneric add2(a,b)
+function select_applicable_methods(generic, args)
+    applicable_methods = []
+    methods = generic_methods(generic)
 
-add2.name
-generic_name(add2)
-add2.parameters
-generic_parameters(add2)
-add2.methods
-generic_methods(add2)
+    #TODO
+    argtypes = get_types_in_symbol(args)
+    # search in the vector for methods that match the argtypes
+    # sortmethods!(applicable_methods)
+
+    return applicable_methods
+end
+
+function get_types_in_symbol(args)
+    map(arg -> class_of(arg), args)
+end
+
+function no_applicable_method(generic, selected_methods, args)
+    if length(selected_methods) > 0
+        return false
+    else
+        println("ERROR: No applicable method for function $(generic_name(generic)) with arguments $(args)")
+        return true
+    end
+end
+
+add(1, 2)
 
 # ----------------------------- methods ---------------------------------
 
@@ -537,7 +567,7 @@ function method_specializers(method::multiMethod)
     method.specializers
 end
 
-global MultiMethod = multiMethod(Dict(), nothing, nothing)
+global MultiMethod = multiMethod(Dict(), () -> (), nothing)
 MultiMethod.slots
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
@@ -555,8 +585,12 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
 
     specializers_dict = Dict{Symbol, class}()
 
-    for (p, s) in zip(parameters, specializers)
-        specializers_dict[p] = s
+    if length(specializers) != length(parameters)
+        #TODO
+    else
+        for (p, s) in zip(parameters, specializers)
+            specializers_dict[p] = s
+        end
     end
 
     new_method = multiMethod(specializers_dict, procedure, generic_function)
@@ -567,54 +601,48 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
     return new_method
 end
 
-defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
-
-add.methods[1]
-add.methods[1].generic_function === add
-add.methods[1].specializers
-
-
 # macro definition for @defmethod
 macro defmethod(expr...)
-    # dump(expr)
-    # println("generic_function: ", expr[1].args[1].args[1])
-    # # println("parameters: ", expr[1].args[1].args[2:end])
-    # # println("specializers: ", expr[1].args[1].args[2].args[2])
-    # println("procedure: ", expr[1].args[2].args[2])
-
+    #dump(expr)
+    fun_name = expr[1].args[1].args[1]
     fun_args = []
     fun_args_specializers = []
-    for arg in expr[1].args[1].args[2:end]
-        # println("arg: ", arg.args[1])
-        # println("specializer: ", arg.args[2])
+    args = expr[1].args[1].args[2:end]
+    for arg in args
         push!(fun_args, arg.args[1])
         push!(fun_args_specializers, class_registry[arg.args[2]])
     end
-    # println(fun_args)
-    # println(fun_args_specializers)
+    arg_names = [arg.args[1] for arg in args]
+
+    #func_expr = Expr(:function, Expr(:call, :foo), Expr(:block, :println, :("Hello, world!")))
+    body = expr[1].args[2]
 
     quote
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, $expr[1].args[2].args[2])
+        # a Julia nao sabe o que e o ComplexNumber
+        # I need to create a new type declaration
+        #exp = [Expr(:typeassert, :a, $fun_args_specializers[1]), Expr(:typeassert, :b, $fun_args_specializers[2])]
+        #dump($exp)
+        #dump($arg_names)
+
+        #defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(Expr(:tuple, [:(arg::$t) for (arg, t) in zip(arg_names, fun_args_specializers)]...)), next_methods, args) -> $body)
+        # !!!!!!!!!!!!!!!!!WRONG !!!!!!!!!!!!!!!!!!!!!!
+        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(arg_names...), next_methods, args) -> $body)
     end
 end
 
 # tests for @defmethod
 @defclass(ComplexNumber, [], [real, imag])
 
-@defmethod add2(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
+@defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
+#@defmethod add(a::Int, b::Int) = x + y
 
-# example on how to access different parts of the expression tree
-macro test(expr...)
-    dump(expr)
-    println("fun_name: ", expr[1].args[1].args[1])
-    println("fun_args: ", expr[1].args[1].args[2:end])
-    println("fun_call: ", expr[1].args[2].args[2].args[1])
-    println("fun_call_args: ", expr[1].args[2].args[2].args[2])
-end
+#defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
 
-@test fun_name(fun_arg1, fun_arg2) = fun_call(fun_call_args)
-# --
+add.methods[1]
+add.methods[1].generic_function === add
+add.methods[1].specializers
+
 
 # --------------------- To test after macros -----------------------------------------------------------
 
@@ -692,7 +720,10 @@ foobar1.b
 foobar1.c
 foobar1.d
 
-# --------------------- To test before macros -----------------------------------------------------------
+class_of(1)
+class_of("Foo")
+
+#= --------------------- To test before macros -----------------------------------------------------------
 
 global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
 
@@ -700,19 +731,6 @@ c1 = new(ComplexNumber, real=1, imag=2)
 println(ComplexNumber)
 c2 = new(ComplexNumber, real=3, imag=4)
 println(ComplexNumber)
-
-# built-in class
-global BuiltInClass = class(:BuiltInClass, [Top], Dict())
-_Int64 = new(BuiltInClass)
-compute_cpl(_Int64) # wrong should be: builtinclass, top
-_Float64 = new(BuiltInClass)
-_String = new(BuiltInClass)
-
-const BUILTIN_CLASSES = Dict(
-    Int => _Int64,
-    Float64 => _Float64,
-    String => _String,
-)
 
 # function Base.show(io::IO, classes::Vector{class})
 # println("show vec")
@@ -752,9 +770,6 @@ println("hello")
 class_of(class_of(class_of(c1)))
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
-
-class_of(1)
-class_of("Foo")
 
 for classe in instance_registry
     println(classe)
@@ -854,38 +869,4 @@ s1 = new(Student, nome="Joao", id=1)
 getproperty(s1, :nome)
 println(s1)
 s1.nome
-s1.id
-
-#global GenericFunction = defgeneric(:GenericFunction, [])
-#global MultiMethod = defmethod([], [], )
-
-#=
-function defgeneric(name::Symbol, args...)
-    #@eval ($name)(args...) = nothing
-    f = eval(Expr(:function, Expr(:call, name, args...), :nothing))
-    eval(Expr(:(=), name, f))
-
-    nao usar eval, quote ou uma Expr
-    println("I entered a generic function.")
-end
-
-defgeneric(:add, :a, :b)
-
-defgeneric(:print_object, :obj, :io)
-
-function defmethod(name::Symbol, argtypes::Tuple, body::Expr)
-    generic_function = getfield(Main, name)
-    if !isa(generic_function, Function)
-        error("'$name' not a function")
-    end
-    f = Expr(:function, Expr(:call, generic_function, argtypes...), body)
-    eval(Meta.parse(string(f)))
-end
-
-# does not work, says a not defined
-#defmethod(:add, (Int64, Int64), :(a+b))
-
-#=
-c2 = new(ComplexNumber, real=3, imag=4)
-println(add(c1, c2))
-=#
+s1.id=#
