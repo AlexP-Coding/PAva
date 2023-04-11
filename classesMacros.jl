@@ -38,10 +38,19 @@ struct genericFunction
     end
 end
 
+struct instanceWrap
+    classtoinstance::Dict{Symbol, Any}
+end
+
 # global dictionary to keep track of clases
 class_registry = Dict{Symbol, class}()
-# global dictionary to keep track of instances
+# global dictionary to keep track of instances 
 instance_registry = Vector{class}()
+
+
+instance_registry_2 = Dict{instanceWrap, class}()
+
+
 # global dictionary to keep track of generic functions
 generic_registry = Dict{Symbol, genericFunction}()
 
@@ -171,8 +180,17 @@ function Base.copy(m::class)
 end
 
 function allocate_instance(classe::class)
-    instance = copy(classe)
-    push!(instance_registry, instance)
+    # nao deve ser copy
+    # estrutura que tem dicionario
+    instance_classe = copy(classe)
+    #slots_dict = Dict()
+    slots_dict = getfield(instance_classe, :direct_slots)
+    #for (slot, value) in getfield(instance_classe, :direct_slots)
+    #    slots_dict[slot] = nothing
+    #end
+    instance = instanceWrap(slots_dict)
+    #push!(instance_registry, instance)
+    instance_registry_2[instance] = instance_classe
     return instance
 end
 
@@ -198,7 +216,8 @@ function compute_cpl(c::class)
     return cpl
 end
 
-function initialize(classe::class; kwargs...)
+function initialize(instance::instanceWrap; kwargs...)
+    classe = instance_registry_2[instance]
     for super_class in getfield(classe, :direct_superclasses)
         for super_slot in getfield(super_class, :direct_slots)
             if haskey(kwargs, super_slot.first)
@@ -209,16 +228,24 @@ function initialize(classe::class; kwargs...)
     for (slot, value) in getfield(classe, :direct_slots)
         if haskey(kwargs, slot)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
+            if haskey(getfield(instance, :classtoinstance), slot)
+                println(slot)
+                println(getfield(instance, :classtoinstance))
+                getfield(instance, :classtoinstance)[slot] = kwargs[slot]
+            end
         end
     end
+    println("instance_classe: ", classe)
 end
 
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
+    instance_classe = instance_registry_2[instance]
+    println("new_instance: ", instance)
     if getfield(classe, :name) != BuiltInClass
         initialize(instance; kwargs...)
         cpl = compute_cpl(classe)
-        append!(getfield(instance, :class_precedence_list), cpl) #acho que isto nao esta
+        append!(getfield(instance_classe, :class_precedence_list), cpl) #acho que isto nao esta
     end
     return instance
 end
@@ -282,6 +309,11 @@ function Base.getproperty(generic::genericFunction, slot::Symbol)
     end
 end
 
+function Base.getproperty(instance::instanceWrap, slot::Symbol)
+    classe = instance_registry_2[instance]
+    Base.getproperty(classe, slot)
+end
+
 function Base.getproperty(classe::class, slot::Symbol)
     if slot == :slots
         if(classe == Class)
@@ -343,6 +375,12 @@ function Base.getproperty(classe::class, slot::Symbol)
     error("$(classe.name) does not have slot $slot")
 end
 
+function Base.setproperty!(instance::instanceWrap, slot::Symbol, value::Any)
+    classe = instance_registry_2[instance]
+    getfield(instance, :classtoinstance)[slot] = value
+    Base.setproperty!(classe, slot, value)
+end
+
 function Base.setproperty!(classe::class, slot::Symbol, value::Any)
     if haskey(getfield(classe, :direct_slots), slot)
         getfield(classe, :direct_slots)[slot] = value
@@ -353,13 +391,19 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
 end
 
 function class_of(x)
-    # println("inside class_of")
+    #println(x)
     if x == Class
+        println("entrei1")
         return Class
+    elseif x isa instanceWrap
+        println("entrei2")
+        classe = instance_registry_2[x]
+        return class_of(classe)
     elseif x isa class
+        println("entrei3")
         cpl = getfield(x, :class_precedence_list)
         # println(cpl(getfield(x, :class_precedence_list)))
-        # println(cpl)
+        #println(cpl)
         # if length(cpl) != 0
         if !isempty(cpl)
             # x2 = cpl[1]
@@ -371,6 +415,7 @@ function class_of(x)
         end
         # end
     elseif x isa genericFunction
+        println("entrei4")
         return GenericFunction
     else
         println("aqui")
@@ -421,6 +466,15 @@ end
 function Base.show(io::IO, classe::class)
     # println("show")
     return print_object(classe)
+end
+
+function Base.show(io::IO, instance::instanceWrap)
+    # println("show")
+    return print_object(instance)
+end
+
+function print_object(instance::instanceWrap)
+    println("<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
 end
 
 function Base.show(io::IO, method::multiMethod)
@@ -649,7 +703,7 @@ add.methods[1].generic_function
 @defclass(ComplexNumber, [], [real, imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
-
+ComplexNumber
 getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
 
