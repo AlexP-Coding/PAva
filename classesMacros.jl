@@ -576,11 +576,11 @@ add.methods[1].specializers
 
 # macro definition for @defmethod
 macro defmethod(expr...)
-    # dump(expr)
+    dump(expr)
     # println("generic_function: ", expr[1].args[1].args[1])
-    # # println("parameters: ", expr[1].args[1].args[2:end])
-    # # println("specializers: ", expr[1].args[1].args[2].args[2])
-    # println("procedure: ", expr[1].args[2].args[2])
+    println("parameters: ", expr[1].args[1].args[2:end])
+    # println("specializers: ", expr[1].args[1].args[2].args[2])
+    println("procedure: ", expr[1].args[2].args[2])
 
     fun_args = []
     fun_args_specializers = []
@@ -594,7 +594,11 @@ macro defmethod(expr...)
     # println(fun_args_specializers)
 
     quote
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, $expr[1].args[2].args[2])
+        # defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, $expr[1].args[2].args[2])
+
+        function hi()
+            println("burgers")
+        end
     end
 end
 
@@ -602,6 +606,19 @@ end
 @defclass(ComplexNumber, [], [real, imag])
 
 @defmethod add2(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
+
+generic_methods(add2)
+add2.methods[1].procedure
+
+c1 = new(ComplexNumber, real=1, imag=1)
+c2 = new(ComplexNumber, real=2, imag=2)
+add2(c1,c2)
+
+function add3(arg1, arg2)
+    return arg1 + arg2
+end
+
+add3(1,1)
 
 
 # example on how to access different parts of the expression tree
