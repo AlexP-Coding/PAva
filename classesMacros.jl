@@ -577,7 +577,7 @@ add.methods[1].specializers
 # macro definition for @defmethod
 macro defmethod(expr...)
     dump(expr)
-    # println("generic_function: ", expr[1].args[1].args[1])
+    println("generic_function: ", expr[1].args[1].args[1])
     println("parameters: ", expr[1].args[1].args[2:end])
     # println("specializers: ", expr[1].args[1].args[2].args[2])
     println("procedure: ", expr[1].args[2].args[2])
@@ -596,7 +596,7 @@ macro defmethod(expr...)
     quote
         # defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, $expr[1].args[2].args[2])
 
-        function hi()
+        function $(esc(expr[1].args[1].args[1]))()
             println("burgers")
         end
     end
@@ -620,6 +620,20 @@ end
 
 add3(1,1)
 
+# example of macro that makes a function
+macro make_fun(name)
+    name_str = "$name"
+    quote
+        function $(esc(name))()
+            println("Hello ", $name_str, "!")
+        end
+    end
+end
+
+@make_fun(fun1)
+
+@macroexpand @make_fun(fun2)
+# --
 
 # example on how to access different parts of the expression tree
 macro test(expr...)
