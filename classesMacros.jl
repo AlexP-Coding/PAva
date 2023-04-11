@@ -591,12 +591,8 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
 
     specializers_dict = Dict{Symbol, class}()
 
-    if length(specializers) != length(parameters)
-        #TODO
-    else
-        for (p, s) in zip(parameters, specializers)
-            specializers_dict[p] = s
-        end
+    for (p, s) in zip(parameters, specializers)
+        specializers_dict[p] = s
     end
 
     new_method = multiMethod(specializers_dict, procedure, generic_function)
@@ -613,11 +609,18 @@ macro defmethod(expr...)
     fun_args = []
     fun_args_specializers = []
     args = expr[1].args[1].args[2:end]
+    arg_names = []
     for arg in args
-        push!(fun_args, arg.args[1])
-        push!(fun_args_specializers, class_registry[arg.args[2]])
+        if isa(arg, Symbol)
+            push!(fun_args, arg)
+            push!(arg_names, arg)
+            push!(fun_args_specializers, Top)
+        else
+            push!(fun_args, arg.args[1])
+            push!(arg_names, arg.args[1])
+            push!(fun_args_specializers, class_registry[arg.args[2]])
+        end
     end
-    arg_names = [arg.args[1] for arg in args]
     body = expr[1].args[2]
 
     quote
@@ -629,6 +632,7 @@ end
 @defclass(ComplexNumber, [], [real, imag])
 
 @defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
+#@defmethod add(a::ComplexNumber, b) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
 #@defmethod add(a::Int, b::Int) = x + y
 
