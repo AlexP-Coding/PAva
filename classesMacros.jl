@@ -352,10 +352,68 @@ function Base.setproperty!(classe::class, slot::Symbol, value::Any)
     return getfield(classe, :direct_slots)[slot]
 end
 
+function class_of(x)
+    # println("inside class_of")
+    if x == Class
+        return Class
+    elseif x isa class
+        cpl = getfield(x, :class_precedence_list)
+        # println(cpl(getfield(x, :class_precedence_list)))
+        # println(cpl)
+        # if length(cpl) != 0
+        if !isempty(cpl)
+            # x2 = cpl[1]
+            # println(string("cpl[1] x2",x2))
+            return cpl[1]
+        else
+            # println("cpl is empty")
+            return Class
+        end
+        # end
+    elseif x isa genericFunction
+        return GenericFunction
+    else
+        println("aqui")
+        special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
+        if special_name === nothing
+            error("No class found for type $(typeof(x))")
+        end
+        println(special_name) # needs to be change, we need to return e.g. _Int64
+        return special_name
+    end
+end
+
+function class_name(classe::class) 
+    getfield(classe, :name)
+end
+
+function class_slots(classe::class) 
+    classe.slots
+end
+
+function class_direct_slots(classe::class) 
+    classe.direct_slots
+end
+
+function class_cpl(classe::class) 
+    classe.class_precedence_list
+end
+
+function class_direct_superclasses(classe::class) 
+    classe.direct_superclasses
+end
+
+global Class = defclass(:Class, [], [])
+class_registry[:Class] = Class
+
 function print_object(classe::class)
     if getfield(classe, :metaclass) !== nothing
         return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
+    elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
+        #println("entrei2")
+        return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
     else
+        #println("entrei2")
         return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
     end
 end
@@ -403,55 +461,6 @@ const BUILTIN_CLASSES = Dict(
     String => _String,
 )
 
-function class_of(x)
-    # println("inside class_of")
-    if x == Class
-        return Class
-    elseif x isa class
-        cpl = getfield(x, :class_precedence_list)
-        # println(cpl(getfield(x, :class_precedence_list)))
-        # println(cpl)
-        # if length(cpl) != 0
-        if !isempty(cpl)
-            # x2 = cpl[1]
-            # println(string("cpl[1] x2",x2))
-            return cpl[1]
-        else
-            # println("cpl is empty")
-            return Class
-        end
-        # end
-    elseif x isa genericFunction
-        return GenericFunction
-    else
-        special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
-        if special_name === nothing
-            error("No class found for type $(typeof(x))")
-        end
-        return BuiltInClass
-    end
-end
-
-function class_name(classe::class) 
-    getfield(classe, :name)
-end
-
-function class_slots(classe::class) 
-    classe.slots
-end
-
-function class_direct_slots(classe::class) 
-    classe.direct_slots
-end
-
-function class_cpl(classe::class) 
-    classe.class_precedence_list
-end
-
-function class_direct_superclasses(classe::class) 
-    classe.direct_superclasses
-end
-
 macro defclass(expr...)
     println(expr[1])
     #dump(expr)
@@ -459,9 +468,6 @@ macro defclass(expr...)
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
     end
 end
-
-global Class = defclass(:Class, [], [])
-class_registry[:Class] = Class
 
 Class.name
 Class.slots
@@ -596,6 +602,7 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
     new_method = multiMethod(specializers_dict, procedure, generic_function)
 
     #add method to generic function
+    #ver se já existe na generic function aquele metodo, para nao ter repetidos
     push!(getfield(generic, :methods), new_method)
 
     return new_method
@@ -603,8 +610,6 @@ end
 
 # macro definition for @defmethod
 macro defmethod(expr...)
-    #dump(expr)
-    fun_name = expr[1].args[1].args[1]
     fun_args = []
     fun_args_specializers = []
     args = expr[1].args[1].args[2:end]
@@ -613,19 +618,9 @@ macro defmethod(expr...)
         push!(fun_args_specializers, class_registry[arg.args[2]])
     end
     arg_names = [arg.args[1] for arg in args]
-
-    #func_expr = Expr(:function, Expr(:call, :foo), Expr(:block, :println, :("Hello, world!")))
     body = expr[1].args[2]
 
     quote
-        # a Julia nao sabe o que e o ComplexNumber
-        # I need to create a new type declaration
-        #exp = [Expr(:typeassert, :a, $fun_args_specializers[1]), Expr(:typeassert, :b, $fun_args_specializers[2])]
-        #dump($exp)
-        #dump($arg_names)
-
-        #defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(Expr(:tuple, [:(arg::$t) for (arg, t) in zip(arg_names, fun_args_specializers)]...)), next_methods, args) -> $body)
-        # !!!!!!!!!!!!!!!!!WRONG !!!!!!!!!!!!!!!!!!!!!!
         defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(arg_names...), next_methods, args) -> $body)
     end
 end
@@ -642,6 +637,7 @@ end
 add.methods[1]
 add.methods[1].generic_function === add
 add.methods[1].specializers
+add.methods[1].generic_function
 
 
 # --------------------- To test after macros -----------------------------------------------------------
