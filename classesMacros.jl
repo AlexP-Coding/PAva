@@ -245,7 +245,7 @@ function new(classe::class; kwargs...)
     if getfield(classe, :name) != BuiltInClass
         initialize(instance; kwargs...)
         cpl = compute_cpl(classe)
-        append!(getfield(instance_classe, :class_precedence_list), cpl) #acho que isto nao esta
+        append!(getfield(instance_classe, :class_precedence_list), cpl)
     end
     return instance
 end
@@ -294,6 +294,8 @@ function Base.getproperty(method::multiMethod, slot::Symbol)
         end
     elseif slot == :specializers
         return collect(values(getfield(method, :specializers)))
+    elseif slot == :procedure
+        return getfield(method, :($slot))
     end
 end
 
@@ -393,14 +395,14 @@ end
 function class_of(x)
     #println(x)
     if x == Class
-        println("entrei1")
+        #println("entrei1")
         return Class
     elseif x isa instanceWrap
-        println("entrei2")
+        #println("entrei2")
         classe = instance_registry_2[x]
         return class_of(classe)
     elseif x isa class
-        println("entrei3")
+        #println("entrei3")
         cpl = getfield(x, :class_precedence_list)
         # println(cpl(getfield(x, :class_precedence_list)))
         #println(cpl)
@@ -415,10 +417,10 @@ function class_of(x)
         end
         # end
     elseif x isa genericFunction
-        println("entrei4")
+        #println("entrei4")
         return GenericFunction
     else
-        println("aqui")
+        #println("aqui")
         special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
         if special_name === nothing
             error("No class found for type $(typeof(x))")
@@ -577,33 +579,87 @@ generic_methods(add)
 
 # generic function call
 (x::genericFunction)(args...) = generic_call(x, args)
+(x::multiMethod)(args...) = x.procedure(args...)
 
 function generic_call(generic::genericFunction, args)
     @assert length(args) == length(getfield(generic, :parameters))
 
-    methods = select_applicable_methods(generic, args)
+    selected_methods = select_applicable_methods(generic, args)
+    println("selected_methods: ", selected_methods)
 
-    if !no_applicable_method(generic, methods, args)
-        println("ola2")
+    args = get_types_in_symbol(args)
+
+    if !no_applicable_method(generic, selected_methods, args)
+        println("Tem!")
+        return selected_methods[1].procedure(args..., call_next_method(selected_methods[2:end], args), args)
     else
+        println("Nao tem!")
         return
     end
 end
 
+function call_next_method(next_methods, args)
+    for idx in 1:length(next_methods)
+        next_methods[idx](args..., next_methods[idx+1:end], args)
+    end
+end
+
 function select_applicable_methods(generic, args)
-    applicable_methods = []
+    #applicable_methods = []
     methods = generic_methods(generic)
 
-    #TODO
     argtypes = get_types_in_symbol(args)
+    #println(argtypes)
     # search in the vector for methods that match the argtypes
-    # sortmethods!(applicable_methods)
+    #println("generic methods: ", generic.methods)
+    applicable_methods = get_applicable_methods(generic.methods, argtypes)
+
+    #TODO
+    #sortmethods!(applicable_methods)
+    #cpl is critical to sort generic function methods according to the type of the arguments
+    #precedence among applicable methods is determined by left-to-right consideration
+    #of the parameters types, m1 is more specific, if the first parameter of m1 is more specific 
+    #than that the type of the first parameter of m2
+
+    #example
+    # c1 -> cpl[c1, c2, object, top]
+    # function call: add(c1, c2)
+    # methods: add(c1, c1)
+    #          add(c1, c2)
+    #          add(c2, c2)
+    #          add(c2, c1)
+    # ordered applicable_methods[add(c1, c1), add(c1, c2), add(c2, c1), add(c2, c2)]
 
     return applicable_methods
 end
 
+function get_applicable_methods(methods, argtypes)
+    applicable_methods = []
+    for method in methods
+        if is_same_type(method_specializers(method), argtypes)
+            push!(applicable_methods, method)
+        end
+    end
+    applicable_methods
+end
+
+function is_same_type(method, argtypes)
+    for i in 1:length(method)
+        #println("method: ", method[i])
+        #println("arg: ", argtypes[i])
+        #println("cpl: ", getfield(argtypes[i], :class_precedence_list))
+        if !(method[i] in getfield(argtypes[i], :class_precedence_list))
+            println("entrei no false")
+            return false
+        end
+        println("nao entrei no if")
+    end
+    true
+end
+
 function get_types_in_symbol(args)
-    map(arg -> class_of(arg), args)
+    return arg_types = map(arg -> instance_registry_2[arg], args)
+    println("arg types function: ", arg_types)
 end
 
 function no_applicable_method(generic, selected_methods, args)
@@ -616,7 +672,7 @@ function no_applicable_method(generic, selected_methods, args)
 end
 
 add(1, 2)
-
+add(c1, c2)
 # ----------------------------- methods ---------------------------------
 
 function method_generic_function(method::multiMethod)
@@ -662,23 +718,24 @@ end
 macro defmethod(expr...)
     fun_args = []
     fun_args_specializers = []
-    args = expr[1].args[1].args[2:end]
-    arg_names = []
-    for arg in args
+    args_types = expr[1].args[1].args[2:end]
+    args = []
+    for arg in args_types
         if isa(arg, Symbol)
             push!(fun_args, arg)
-            push!(arg_names, arg)
+            push!(args, arg)
             push!(fun_args_specializers, Top)
         else
             push!(fun_args, arg.args[1])
-            push!(arg_names, arg.args[1])
+            push!(args, arg.args[1])
             push!(fun_args_specializers, class_registry[arg.args[2]])
         end
     end
     body = expr[1].args[2]
+    #println("body: ", expr[1].args[2].args[2])
 
     quote
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(arg_names...), next_methods, args) -> $body)
+        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
     end
 end
 
@@ -700,9 +757,11 @@ add.methods[1].generic_function
 
 # --------------------- To test after macros -----------------------------------------------------------
 
-@defclass(ComplexNumber, [], [real, imag])
-
 c1 = new(ComplexNumber, real=1, imag=2)
+c2 = new(ComplexNumber, real=3, imag=4)
+
+c1
+
 ComplexNumber
 getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
