@@ -242,19 +242,19 @@ function initialize(instance::instanceWrap; kwargs...)
         if haskey(kwargs, slot)
             getfield(classe, :direct_slots)[slot] = kwargs[slot]
             if haskey(getfield(instance, :classtoinstance), slot)
-                println(slot)
-                println(getfield(instance, :classtoinstance))
+                #println(slot)
+                #println(getfield(instance, :classtoinstance))
                 getfield(instance, :classtoinstance)[slot] = kwargs[slot]
             end
         end
     end
-    println("instance_classe: ", classe)
+    #println("instance_classe: ", classe)
 end
 
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     instance_classe = instance_registry_2[instance]
-    println("new_instance: ", instance)
+    #println("new_instance: ", instance)
 
     initialize(instance; kwargs...)
     cpl = compute_cpl(classe)
@@ -286,7 +286,7 @@ function compute_slots(classe:: class)
     end
 
     #println("Printing all slots:")
-    println(all_slots)
+    #println(all_slots)
     return all_slots
 end
 
@@ -424,6 +424,8 @@ function class_of(x)
             # x2 = cpl[1]
             # println(string("cpl[1] x2",x2))
             return cpl[1]
+        elseif getfield(x, :metaclass) !== nothing
+            return getfield(x, :metaclass)
         else
             # println("cpl is empty")
             return Class
@@ -432,6 +434,9 @@ function class_of(x)
     elseif x isa genericFunction
         #println("entrei4")
         return GenericFunction
+    elseif x isa multiMethod
+        #println("entrei4")
+        return MultiMethod
     elseif x isa Int64
         return _Int64
     elseif x isa Float64
@@ -466,7 +471,7 @@ class_registry[:Class] = Class
 
 function print_object(classe::class)
     if getfield(classe, :metaclass) !== nothing
-        println(class_name(classe))
+        #println(class_name(classe))
         return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
     #elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
         #println("entrei1")
@@ -519,27 +524,18 @@ function print_object(generic::genericFunction)
     end
 end
 
-class_of(1)
-class_of("Foo")
-
 macro defclass(expr...)
-    println(expr[1])
+    #println(expr[1])
     #dump(expr)
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
     end
 end
 
-Class.name
-Class.slots
-
-class_name(Class)
-class_slots(Class)
-
 # ----------------------------- generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
-    println("I entered a generic function.")
+    #println("I entered a generic function.")
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
@@ -558,7 +554,6 @@ function generic_methods(generic::genericFunction)
 end
 
 global GenericFunction = genericFunction(:GenericFunction, [], [])
-GenericFunction.slots
 
 # macro definition for @defgeneric
 macro defgeneric(expr...)
@@ -568,19 +563,6 @@ macro defgeneric(expr...)
 end
 
 #global add = defgeneric(:add, [:a, :b])
-
-# @defgeneric tests
-@defgeneric add(a, b)
-
-add
-class_of(add) === GenericFunction
-
-add.name
-generic_name(add)
-add.parameters
-generic_parameters(add)
-add.methods
-generic_methods(add)
 
 # generic function call
 (x::genericFunction)(args...) = generic_call(x, args)
@@ -695,7 +677,6 @@ function method_specializers(method::multiMethod)
 end
 
 global MultiMethod = multiMethod(Dict(), () -> (), nothing)
-MultiMethod.slots
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
@@ -766,7 +747,7 @@ add.methods[1]
 add.methods[1].generic_function === add
 add.methods[1].specializers
 add.methods[1].generic_function
-
+class_of(add.methods[1]) === MultiMethod
 
 # --------------------- To test after macros -----------------------------------------------------------
 
@@ -783,13 +764,33 @@ c1.real
 c1.imag
 c1.imag += 3
 
+# @defgeneric tests
+@defgeneric add(a, b)
+
+add(123, 456)
+class_of(add) === GenericFunction
+
+add.name
+generic_name(add)
+add.parameters
+generic_parameters(add)
+add.methods
+generic_methods(add)
+
+GenericFunction.slots
+MultiMethod.slots
+
 class_of(c1) === ComplexNumber
 ComplexNumber.direct_slots
 
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
 
+Class.name
 Class.slots
+class_name(Class)
+class_slots(Class)
+
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
 
@@ -845,6 +846,21 @@ foobar1.a
 foobar1.b
 foobar1.c
 foobar1.d
+
+@defclass(UndoableClass, [Class], [])
+
+@defclass(Person, [],
+[[name, reader=get_name, writer=set_name!],
+[age, reader=get_age, writer=set_age!, initform=0],
+[friend, reader=get_friend, writer=set_friend!]],
+metaclass=UndoableClass)
+
+Person
+class_of(Person)
+class_of(class_of(Person))
+
+class_of(1)
+class_of("Foo")
 
 #= --------------------- To test before macros -----------------------------------------------------------
 
