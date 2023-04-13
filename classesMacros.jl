@@ -63,6 +63,17 @@ class_registry[:Object] = Object
 
 # built-in class
 global BuiltInClass = class(:BuiltInClass, [Top], Dict())
+class_registry[:BuiltInClass] = BuiltInClass
+
+global _Int64 = class(:_Int64, [], Dict(), [], BuiltInClass)
+class_registry[:_Int64] = _Int64
+append!(getfield(_Int64, :class_precedence_list), [BuiltInClass, _Int64, Top])
+global _Float64 = class(:_Float64, [], Dict(), [], BuiltInClass)
+class_registry[:_Float64] = _Float64
+append!(getfield(_Float64, :class_precedence_list), [BuiltInClass, _Float64, Top])
+global _String = class(:_String, [], Dict(), [], BuiltInClass)
+class_registry[:_String] = _String
+append!(getfield(_String, :class_precedence_list), [BuiltInClass, _String, Top])
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     #slots_dict = Dict(slot => nothing for slot in direct_slots)
@@ -210,7 +221,9 @@ function compute_cpl(c::class)
             end
         end
     end
-
+    if c == BuiltInClass
+        return cpl
+    end
     push!(cpl, Object)
     push!(cpl, Top)
     return cpl
@@ -242,11 +255,11 @@ function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     instance_classe = instance_registry_2[instance]
     println("new_instance: ", instance)
-    if getfield(classe, :name) != BuiltInClass
-        initialize(instance; kwargs...)
-        cpl = compute_cpl(classe)
-        append!(getfield(instance_classe, :class_precedence_list), cpl)
-    end
+
+    initialize(instance; kwargs...)
+    cpl = compute_cpl(classe)
+    append!(getfield(instance_classe, :class_precedence_list), cpl)
+    
     return instance
 end
 
@@ -420,19 +433,11 @@ function class_of(x)
         #println("entrei4")
         return GenericFunction
     elseif x isa Int64
-        println("<BuiltInClass _Int64>")
+        return _Int64
     elseif x isa Float64
-        println("<BuiltInClass _Float64>")
+        return _Float64
     elseif x isa String
-        println("<BuiltInClass _String>")
-    #elseif x == BuiltInClass
-        #println("aqui")
-        #special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
-        #if special_name === nothing
-        #    error("No class found for type $(typeof(x))")
-        #end
-        #println(special_name) # needs to be change, we need to return e.g. _Int64
-        #return BuiltInClass
+        return _String
     end
 end
 
@@ -461,10 +466,11 @@ class_registry[:Class] = Class
 
 function print_object(classe::class)
     if getfield(classe, :metaclass) !== nothing
+        println(class_name(classe))
         return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
-    elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
-        #println("entrei2")
-        return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+    #elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
+        #println("entrei1")
+        #return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
     else
         #println("entrei2")
         return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
@@ -513,18 +519,8 @@ function print_object(generic::genericFunction)
     end
 end
 
-_Int64 = new(BuiltInClass)
-_Float64 = new(BuiltInClass)
-_String = new(BuiltInClass)
-
 class_of(1)
 class_of("Foo")
-
-#=const BUILTIN_CLASSES = Dict(
-    Int => _Int64,
-    Float64 => _Float64,
-    String => _String,
-)=#
 
 macro defclass(expr...)
     println(expr[1])
@@ -596,8 +592,6 @@ function generic_call(generic::genericFunction, args)
     selected_methods = select_applicable_methods(generic, args)
     println("selected_methods: ", selected_methods)
 
-    args = get_types_in_symbol(args)
-
     if !no_applicable_method(generic, selected_methods, args)
         println("Tem!")
         return selected_methods[1].procedure(args..., call_next_method(selected_methods[2:end], args), args)
@@ -654,9 +648,9 @@ end
 
 function is_same_type(method, argtypes)
     for i in 1:length(method)
-        #println("method: ", method[i])
-        #println("arg: ", argtypes[i])
-        #println("cpl: ", getfield(argtypes[i], :class_precedence_list))
+        println("method: ", method[i])
+        println("arg: ", argtypes[i])
+        println("cpl: ", getfield(argtypes[i], :class_precedence_list))
         if !(method[i] in getfield(argtypes[i], :class_precedence_list))
             println("entrei no false")
             return false
@@ -667,7 +661,15 @@ function is_same_type(method, argtypes)
 end
 
 function get_types_in_symbol(args)
-    return arg_types = map(arg -> instance_registry_2[arg], args)
+    return arg_types = map(arg -> ( if arg isa Int64 
+                                        return _Int64
+                                    elseif arg isa Float64
+                                        return _Float64
+                                    elseif arg isa String
+                                        return _String
+                                    else 
+                                        return instance_registry_2[arg]
+                                    end), args)
     println("arg types function: ", arg_types)
 end
 
@@ -747,6 +749,8 @@ macro defmethod(expr...)
         defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
     end
 end
+
+@defmethod add(a::_Int64, b::_Int64) = a + b
 
 # tests for @defmethod
 @defclass(ComplexNumber, [], [real, imag])
