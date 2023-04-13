@@ -419,14 +419,20 @@ function class_of(x)
     elseif x isa genericFunction
         #println("entrei4")
         return GenericFunction
-    else
+    elseif x isa Int64
+        println("<BuiltInClass _Int64>")
+    elseif x isa Float64
+        println("<BuiltInClass _Float64>")
+    elseif x isa String
+        println("<BuiltInClass _String>")
+    #elseif x == BuiltInClass
         #println("aqui")
-        special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
-        if special_name === nothing
-            error("No class found for type $(typeof(x))")
-        end
-        println(special_name) # needs to be change, we need to return e.g. _Int64
-        return special_name
+        #special_name = get(BUILTIN_CLASSES, typeof(x), nothing)
+        #if special_name === nothing
+        #    error("No class found for type $(typeof(x))")
+        #end
+        #println(special_name) # needs to be change, we need to return e.g. _Int64
+        #return BuiltInClass
     end
 end
 
@@ -511,11 +517,14 @@ _Int64 = new(BuiltInClass)
 _Float64 = new(BuiltInClass)
 _String = new(BuiltInClass)
 
-const BUILTIN_CLASSES = Dict(
+class_of(1)
+class_of("Foo")
+
+#=const BUILTIN_CLASSES = Dict(
     Int => _Int64,
     Float64 => _Float64,
     String => _String,
-)
+)=#
 
 macro defclass(expr...)
     println(expr[1])
@@ -832,9 +841,6 @@ foobar1.a
 foobar1.b
 foobar1.c
 foobar1.d
-
-class_of(1)
-class_of("Foo")
 
 #= --------------------- To test before macros -----------------------------------------------------------
 
