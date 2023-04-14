@@ -1,9 +1,10 @@
-#=
-classes:
-- Julia version: 
-- Author: alexa
-- Date: 2023-03-25
-=#
+# Group 3
+# Alexandra Rodrigues 95528
+# Alexandra Pato 97375
+# Miguel Encarnacao 105718
+# Mafalda Cravo 105728
+
+# ------ Julia's structs to reify classes, generic functions, methods and instances ------
 
 struct class
     name::Symbol
@@ -19,13 +20,8 @@ end
 
 struct multiMethod
     specializers::Dict{Symbol, class}
-    #procedure::Union{Expr, Nothing}
     procedure::Function
     generic_function::Union{Symbol, Nothing}
-
-    #function multiMethod(specializers, procedure, generic_function)
-    #    new(specializers, procedure, generic_function)
-    #end
 end
 
 struct genericFunction
@@ -42,38 +38,42 @@ struct instanceWrap
     classtoinstance::Dict{Symbol, Any}
 end
 
+# ------ Global dictionaries to keep track of classes, instances and generic functions ------
+
 # global dictionary to keep track of clases
 class_registry = Dict{Symbol, class}()
-# global dictionary to keep track of instances 
-instance_registry = Vector{class}()
 
-
+# global dictionary to keep track of classes of instances
 instance_registry_2 = Dict{instanceWrap, class}()
-
 
 # global dictionary to keep track of generic functions
 generic_registry = Dict{Symbol, genericFunction}()
 
-# root of class hierarchy
+# ------ Creation of Top, Object and BuiltInClass classes ------
+
 global Top = class(:Top, [], Dict())
 
-# Object is a subclass of Top; all (regular) classes inherit from Object
 global Object = class(:Object, [Top], Dict())
 class_registry[:Object] = Object
 
-# built-in class
 global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
+
+# ------ Creation of special classes that represent Julia's predefined types with BuiltInClass as metaclass ------
 
 global _Int64 = class(:_Int64, [], Dict(), [], BuiltInClass)
 class_registry[:_Int64] = _Int64
 append!(getfield(_Int64, :class_precedence_list), [BuiltInClass, _Int64, Top])
+
 global _Float64 = class(:_Float64, [], Dict(), [], BuiltInClass)
 class_registry[:_Float64] = _Float64
 append!(getfield(_Float64, :class_precedence_list), [BuiltInClass, _Float64, Top])
+
 global _String = class(:_String, [], Dict(), [], BuiltInClass)
 class_registry[:_String] = _String
 append!(getfield(_String, :class_precedence_list), [BuiltInClass, _String, Top])
+
+# ------ Function definitions ------
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     #slots_dict = Dict(slot => nothing for slot in direct_slots)
@@ -181,11 +181,6 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     return new_classe
 end
 
-#= in assignment is obj::Object
-function print_object(obj::class, io::IO)
-    println(io, "<$(class_name(class_of(obj))) $(string(objectid(obj), base=62))>")
-end=#
-
 function Base.copy(m::class)
     return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
 end
@@ -290,11 +285,6 @@ function compute_slots(classe:: class)
     return all_slots
 end
 
-#global Foo = defclass(:Foo, [], [:a => 2, :b => 9])
-#global Bar = defclass(:Bar, [], [:c => 3, :d => 4])
-#global FooBar = defclass(:FooBar, [Foo, Bar], [:a =>5, :f => 6])
-#compute_slots(FooBar)
-
 function Base.getproperty(method::multiMethod, slot::Symbol)
     if slot == :slots
         return println(collect(fieldnames(multiMethod)))
@@ -356,18 +346,13 @@ function Base.getproperty(classe::class, slot::Symbol)
             for c in getfield(classe, :($slot))
                 push!(classes, c)
             end
+            #println(classes)
             return classes
         end
     end
 
     if slot == :class_precedence_list
-        if isdefined(classe, slot)
-            classes = []
-            for c in getfield(classe, :($slot))
-                push!(classes, c)
-            end
-            return classes
-        end
+        return compute_cpl(classe)
     end
 
     # slot is a slot
@@ -466,73 +451,76 @@ function class_direct_superclasses(classe::class)
     classe.direct_superclasses
 end
 
+# ------ Creation of Class class ------
+
 global Class = defclass(:Class, [], [])
 class_registry[:Class] = Class
 
-function print_object(classe::class)
+# ------ Function definitions for printing objects ------
+
+function Base.show(io::IO, classe::class)
+    return print_object(classe, io)
+end
+
+function print_object(classe::class, io::IO)
     if getfield(classe, :metaclass) !== nothing
         #println(class_name(classe))
-        return println("<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
+        return print(io, "<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
     #elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
         #println("entrei1")
         #return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
     else
         #println("entrei2")
-        return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
+        return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
     end
-end
-
-function Base.show(io::IO, classe::class)
-    # println("show")
-    return print_object(classe)
 end
 
 function Base.show(io::IO, instance::instanceWrap)
     # println("show")
-    return print_object(instance)
+    return print_object(instance, io)
 end
 
-function print_object(instance::instanceWrap)
-    println("<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
+function print_object(instance::instanceWrap, io::IO)
+    print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
 end
 
 function Base.show(io::IO, method::multiMethod)
     # println("show")
-    return print_object(method)
+    return print_object(method, io)
 end
 
-function print_object(method::multiMethod)
+function print_object(method::multiMethod, io::IO)
     specializers = [class_name(spec) for spec in method_specializers(method)]
     spec_tuple = tuple(specializers...)
     if method.generic_function !== nothing
-        return println("<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
+        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
     else
-        return println("<MultiMethod>")
+        return print(io,"<MultiMethod>")
     end
 end
 
 function Base.show(io::IO, generic::genericFunction)
     # println("show")
-    return print_object(generic)
+    return print_object(generic, io)
 end
 
-function print_object(generic::genericFunction)
+function print_object(generic::genericFunction, io::IO)
     if generic_methods(generic) !== nothing
-        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
     else
-        return println("<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
     end
 end
 
+# ------ Macro definition for defclass ------
+
 macro defclass(expr...)
-    #println(expr[1])
-    #dump(expr)
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
     end
 end
 
-# ----------------------------- generic functions ---------------------------------
+# ----------------------------- Generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
     #println("I entered a generic function.")
@@ -558,13 +546,77 @@ global GenericFunction = genericFunction(:GenericFunction, [], [])
 # macro definition for @defgeneric
 macro defgeneric(expr...)
     quote
-        global $(expr[1].args[1]) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+        $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
     end
 end
 
-#global add = defgeneric(:add, [:a, :b])
+# ----------------------------- Multi method ---------------------------------
 
-# generic function call
+function method_generic_function(method::multiMethod)
+    method.generic_function
+end
+
+function method_specializers(method::multiMethod)
+    method.specializers
+end
+
+global MultiMethod = multiMethod(Dict(), () -> (), nothing)
+
+function defmethod(generic_function::Symbol, parameters, specializers, procedure)
+    #if the corresponding generic function does not exist, creates
+    if !(haskey(generic_registry, generic_function))
+        generic = defgeneric(generic_function, parameters)
+    else
+        #method should have the same parameters as corresponding generic function
+        generic = generic_registry[generic_function]
+
+        if !(getfield(generic, :parameters) == parameters)
+            error("method does not have same parameters as $(generic.name)")
+        end
+    end
+
+    specializers_dict = Dict{Symbol, class}()
+
+    for (p, s) in zip(parameters, specializers)
+        specializers_dict[p] = s
+    end
+
+    new_method = multiMethod(specializers_dict, procedure, generic_function)
+
+    # add method to generic function
+    # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
+    push!(getfield(generic, :methods), new_method)
+
+    return new_method
+end
+
+# macro definition for @defmethod
+macro defmethod(expr...)
+    fun_args = []
+    fun_args_specializers = []
+    args_types = expr[1].args[1].args[2:end]
+    args = []
+    for arg in args_types
+        if isa(arg, Symbol)
+            push!(fun_args, arg)
+            push!(args, arg)
+            push!(fun_args_specializers, Top)
+        else
+            push!(fun_args, arg.args[1])
+            push!(args, arg.args[1])
+            push!(fun_args_specializers, class_registry[arg.args[2]])
+        end
+    end
+    body = expr[1].args[2]
+    #println("body: ", expr[1].args[2].args[2])
+
+    quote
+        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
+    end
+end
+
+# ------ Generic function call ------
+
 (x::genericFunction)(args...) = generic_call(x, args)
 (x::multiMethod)(args...) = x.procedure(args...)
 
@@ -609,10 +661,10 @@ function select_applicable_methods(generic, args)
     #example
     # c1 -> cpl[c1, c2, object, top]
     # function call: add(c1, c2)
-    # methods: add(c1, c1)
+    # methods: 
     #          add(c1, c2)
     #          add(c2, c2)
-    #          add(c2, c1)
+    #          
     # ordered applicable_methods[add(c1, c1), add(c1, c2), add(c2, c1), add(c2, c2)]
 
     return applicable_methods
@@ -664,99 +716,12 @@ function no_applicable_method(generic, selected_methods, args)
     end
 end
 
-add(1, 2)
-add(c1, c2)
-# ----------------------------- methods ---------------------------------
+# --------------------- To test -----------------------------------------------------------
 
-function method_generic_function(method::multiMethod)
-    method.generic_function
-end
-
-function method_specializers(method::multiMethod)
-    method.specializers
-end
-
-global MultiMethod = multiMethod(Dict(), () -> (), nothing)
-
-function defmethod(generic_function::Symbol, parameters, specializers, procedure)
-    #if the corresponding generic function does not exist, creates
-    if !(haskey(generic_registry, generic_function))
-        generic = defgeneric(generic_function, parameters)
-    else
-        #method should have the same parameters as corresponding generic function
-        generic = generic_registry[generic_function]
-
-        if !(getfield(generic, :parameters) == parameters)
-            error("method does not have same parameters as $(generic.name)")
-        end
-    end
-
-    specializers_dict = Dict{Symbol, class}()
-
-    for (p, s) in zip(parameters, specializers)
-        specializers_dict[p] = s
-    end
-
-    new_method = multiMethod(specializers_dict, procedure, generic_function)
-
-    #add method to generic function
-    #ver se já existe na generic function aquele metodo, para nao ter repetidos
-    push!(getfield(generic, :methods), new_method)
-
-    return new_method
-end
-
-# macro definition for @defmethod
-macro defmethod(expr...)
-    fun_args = []
-    fun_args_specializers = []
-    args_types = expr[1].args[1].args[2:end]
-    args = []
-    for arg in args_types
-        if isa(arg, Symbol)
-            push!(fun_args, arg)
-            push!(args, arg)
-            push!(fun_args_specializers, Top)
-        else
-            push!(fun_args, arg.args[1])
-            push!(args, arg.args[1])
-            push!(fun_args_specializers, class_registry[arg.args[2]])
-        end
-    end
-    body = expr[1].args[2]
-    #println("body: ", expr[1].args[2].args[2])
-
-    quote
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
-    end
-end
-
-@defmethod add(a::_Int64, b::_Int64) = a + b
-
-# tests for @defmethod
 @defclass(ComplexNumber, [], [real, imag])
 
-@defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
-#@defmethod add(a::ComplexNumber, b) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
-
-#@defmethod add(a::Int, b::Int) = x + y
-
-#defmethod(:add, [:a, :b], [ComplexNumber, ComplexNumber], :(new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))))
-
-add.methods[1]
-add.methods[1].generic_function === add
-add.methods[1].specializers
-add.methods[1].generic_function
-class_of(add.methods[1]) === MultiMethod
-
-# --------------------- To test after macros -----------------------------------------------------------
-
 c1 = new(ComplexNumber, real=1, imag=2)
-c2 = new(ComplexNumber, real=3, imag=4)
 
-c1
-
-ComplexNumber
 getproperty(c1, :real)
 setproperty!(c1, :imag, -1)
 
@@ -764,25 +729,17 @@ c1.real
 c1.imag
 c1.imag += 3
 
-# @defgeneric tests
 @defgeneric add(a, b)
+@defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
-add(123, 456)
-class_of(add) === GenericFunction
+#@defgeneric print_object(obj, io) TODO
 
-add.name
-generic_name(add)
-add.parameters
-generic_parameters(add)
-add.methods
-generic_methods(add)
+c2 = new(ComplexNumber, real=3, imag=4)
 
-GenericFunction.slots
-MultiMethod.slots
+add(c1, c2)
 
 class_of(c1) === ComplexNumber
 ComplexNumber.direct_slots
-
 class_of(class_of(c1)) === Class
 class_of(class_of(class_of(c1))) === Class
 
@@ -794,58 +751,21 @@ class_slots(Class)
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
 
-@defclass(CountingClass, [Class], [counter=0])
+add
+add.name
+generic_name(add)
+add.parameters
+generic_parameters(add)
+add.methods
+generic_methods(add)
+class_of(add) === GenericFunction
+GenericFunction.slots
 
-@defclass(Foo, [], [], metaclass=CountingClass)
-
-@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
-
-@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
-
-@defclass(A, [], [], metaclass=ComplexNumber)
-@defclass(B, [], [], metaclass=ComplexNumber)
-@defclass(C, [], [], metaclass=ComplexNumber)
-@defclass(D, [A, B], [], metaclass=ComplexNumber)
-@defclass(E, [A, C], [], metaclass=ComplexNumber)
-@defclass(F, [D, E], [], metaclass=ComplexNumber)
-
-compute_cpl(F)
-
-@defclass(A, [], [])
-@defclass(B, [], [])
-@defclass(C, [], [])
-@defclass(D, [A, B], [])
-@defclass(E, [A, C], [])
-@defclass(F, [D, E], [])
-
-compute_cpl(F)
-
-@defclass(Circle, [], [center, radius])
-@defclass(ColorMixin, [], [color])
-@defclass(ColoredCircle, [ColorMixin, Circle], [])
-class_name(Circle)
-class_direct_slots(Circle)
-class_direct_slots(ColoredCircle)
-class_slots(ColoredCircle)
-class_direct_superclasses(ColoredCircle)
-
-# class hierarchy
-ColoredCircle.direct_superclasses
-ans[1].direct_superclasses
-ans[1].direct_superclasses
-ans[1].direct_superclasses
-
-@defclass(Foo, [], [a=1, b=2])
-@defclass(Bar, [], [b=3, c=4])
-@defclass(FooBar, [Foo, Bar], [a=5, d=6])
-class_slots(FooBar)
-
-foobar1 = new(FooBar)
-
-foobar1.a
-foobar1.b
-foobar1.c
-foobar1.d
+class_of(add.methods[1]) === MultiMethod
+MultiMethod.slots
+add.methods[1]
+add.methods[1].specializers
+add.methods[1].generic_function === add
 
 @defclass(UndoableClass, [Class], [])
 
@@ -859,85 +779,11 @@ Person
 class_of(Person)
 class_of(class_of(Person))
 
-class_of(1)
-class_of("Foo")
+add(123, 456)
 
-#= --------------------- To test before macros -----------------------------------------------------------
-
-global ComplexNumber = defclass(:ComplexNumber, [], [:real, :imag])
-
-c1 = new(ComplexNumber, real=1, imag=2)
-println(ComplexNumber)
-c2 = new(ComplexNumber, real=3, imag=4)
-println(ComplexNumber)
-
-# function Base.show(io::IO, classes::Vector{class})
-# println("show vec")
-# end
-
-global A = defclass(:A, [], [], metaclass=ComplexNumber)
-global B = defclass(:B, [], [], metaclass=ComplexNumber)
-global C = defclass(:C, [], [], metaclass=ComplexNumber)
-global D = defclass(:D, [A, B], [], metaclass=ComplexNumber)
-global E = defclass(:E, [A, C], [], metaclass=ComplexNumber)
-global F = defclass(:F, [D, E], [], metaclass=ComplexNumber)
-
-compute_cpl(F)
-
-global A = defclass(:A, [], [])
-global B = defclass(:B, [], [])
-global C = defclass(:C, [], [])
-global D = defclass(:D, [A, B], [])
-global E = defclass(:E, [A, C], [])
-global F = defclass(:F, [D, E], [])
-
-compute_cpl(F)
-
-println(class_of(F))
-
-println("hello")
-print_object(c1)
-
-println("ddnsdfhello")
-println(ComplexNumber)
-
-class_of(c1) === ComplexNumber
-
-println("hello")
-println(class_of(c1))
-println("hello")
-class_of(class_of(class_of(c1)))
-class_of(class_of(c1)) === Class
-class_of(class_of(class_of(c1))) === Class
-
-for classe in instance_registry
-    println(classe)
-end
-
-ComplexNumber.name
-ComplexNumber.direct_superclasses == [Object]
-ComplexNumber.direct_slots
-
-class_name(ComplexNumber)
-class_direct_superclasses(ComplexNumber)
-class_direct_slots(ComplexNumber)
-class_slots(ComplexNumber)
-
-getproperty(c1, :real)
-setproperty!(c1, :imag, -1)
-
-c1.real
-c1.imag
-c1.imag += 3
-
-global Circle = defclass(:Circle, [], [:center, :radius])
-global ColorMixin = defclass(:ColorMixin, [], [:color])
-global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
-class_name(Circle)
-class_direct_slots(Circle)
-class_direct_slots(ColoredCircle)
-class_slots(ColoredCircle)
-class_direct_superclasses(ColoredCircle)
+@defclass(Circle, [], [center, radius])
+@defclass(ColorMixin, [], [color])
+@defclass(ColoredCircle, [ColorMixin, Circle], [])
 
 # class hierarchy
 ColoredCircle.direct_superclasses
@@ -945,9 +791,36 @@ ans[1].direct_superclasses
 ans[1].direct_superclasses
 ans[1].direct_superclasses
 
-global Foo = defclass(:Foo, [], [:a => 1, :b => 2])
-global Bar = defclass(:Bar, [], [:b => 3, :c => 4])
-global FooBar = defclass(:FooBar, [Foo, Bar], [:a => 5, :d => 6])
+@defclass(A, [], [])
+@defclass(B, [], [])
+@defclass(C, [], [])
+@defclass(D, [A, B], [])
+@defclass(E, [A, C], [])
+@defclass(F, [D, E], [])
+
+compute_cpl(F)
+
+class_of(1)
+class_of("Foo")
+
+@defmethod add(a::_Int64, b::_Int64) = a + b
+@defmethod add(a::_String, b::_String) = a * b
+
+add(1, 3)
+add("Foo", "Bar")
+
+class_name(Circle)
+class_direct_slots(Circle)
+class_direct_slots(ColoredCircle)
+class_slots(ColoredCircle)
+class_direct_superclasses(ColoredCircle)
+class_cpl(ColoredCircle)
+#generic_methods(draw)
+#method_specializers(generic_methods(draw)[1])
+
+@defclass(Foo, [], [a=1, b=2])
+@defclass(Bar, [], [b=3, c=4])
+@defclass(FooBar, [Foo, Bar], [a=5, d=6])
 class_slots(FooBar)
 
 foobar1 = new(FooBar)
@@ -957,55 +830,21 @@ foobar1.b
 foobar1.c
 foobar1.d
 
-global CountingClass = defclass(:CountingClass, [Class], [:counter => 0])
-global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
+@defclass(FlavorsClass, [Class], [])
 
-global Foo = defclass(:Foo, [], [], metaclass=CountingClass)
-Foo.direct_superclasses
-getfield(Foo, :metaclass)
+@defclass(A, [], [], metaclass=FlavorsClass)
+@defclass(B, [], [], metaclass=FlavorsClass)
+@defclass(C, [], [], metaclass=FlavorsClass)
+@defclass(D, [A, B], [], metaclass=FlavorsClass)
+@defclass(E, [A, C], [], metaclass=FlavorsClass)
+@defclass(F, [D, E], [], metaclass=FlavorsClass)
 
-global Bar = defclass(:Bar, [], [], metaclass=CountingClass)
+compute_cpl(F)
 
+@defclass(CountingClass, [Class], [counter=0])
 
-#=function class_of(classe::class)
-    return classe
-end=#
+@defclass(Foo, [], [], metaclass=CountingClass)
 
-global Shape = defclass(:Shape, [], [])
-global Device = defclass(:Device, [], [])
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
-#global CountingClass = defclass(:CountingClass, [Class], [counter=0])
-#global CountingClass = defclass(:CountingClass, [Class], [Pair(:counter, 0)])
-
-global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
-global ColorMixin = defclass(:ColorMixin, [], [[:color, Pair(:reader, :get_color), Pair(:writer, :set_color!), Pair(:initform, "ola")]])
-
-#global Foo = defclass(:Foo, [], [[:foo, :reader => :get_foo, :writer => :set_foo!, :initform => 123]])
-global Foo = defclass(:Foo, [], [[:foo => 123, :reader => :get_foo, :writer => :set_foo!]])
-
-global Line = defclass(:Line, [Shape], [:from, :to])
-#global Circle = defclass(:Circle, [Shape], [:center, :radius])
-
-global Screen = defclass(:Screen, [Device], [])
-global Printer = defclass(:Printer, [Device], [])
-
-#global ColorMixin = defclass(:ColorMixin, [], [[:color, reader=get_color, writer=set_color!]])
-
-global ColoredLine = defclass(:ColoredLine, [ColorMixin, Line], [])
-#global ColoredCircle = defclass(:ColoredCircle, [ColorMixin, Circle], [])
-
-global ColoredPrinter = defclass(:ColoredPrinter, [Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
-
-global Person = defclass(:Person, [], [[:name, reader=get_name, writer=set_name!],
-[:age, reader=get_age, writer=set_age!, initform=0],
-[:friend, reader=get_friend, writer=set_friend!]],
-metaclass=UndoableClass)
-
-global Person = defclass(:Person, [], [:nome])
-global Student = defclass(:Student, [Person], [:id])
-
-s1 = new(Student, nome="Joao", id=1)
-getproperty(s1, :nome)
-println(s1)
-s1.nome
-s1.id=#
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
