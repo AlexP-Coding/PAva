@@ -522,20 +522,63 @@ end
 # ------ Macro definition for defclass ------
 
 macro defclass(expr...)
-    #=dump(expr)
-    println(expr[3])
-    for expr in expr[3].args
-        println(expr)
-        if length(expr) == 4
+    readers, writers = macroproccess_class(expr[3])
+    println(readers, " and ", writers)
 
-        end
-    end=#
+    class_name = expr[1]
+    #println(class_name)
+
     quote
+        #println("entrei")
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
+
+        #=for (slot, method) in $readers
+            println("Key: $slot, Value: $method")
+            #@defmethod :(method(o::class_name) = o.$(slot))
+        end=#
     end
 end
 
+function macroproccess_class(expr::Expr)
+    readers = Dict()
+    writers = Dict()
+    if length(expr.args) > 0
+        if expr.args[1].head == :vect
+            for exp in expr.args
+                if exp.args[1] isa Symbol
+                    slot_name = exp.args[1]
+                else
+                    slot_name = exp.args[1].args[1]
+                end
+                if length(exp.args) == 3 || length(exp.args) == 4
+                    if exp.args[2].args[1] == :reader
+                        readers[slot_name] = exp.args[2].args[2]
+                    end
+
+                    if exp.args[3].args[1] == :writer
+                        writers[slot_name] = exp.args[3].args[2]
+                    end
+
+                elseif length(exp.args) == 2
+                    if exp.args[2].args[1] == :reader
+                        readers[slot_name] = exp.args[2].args[2]
+                    elseif exp.args[2].args[1] == :writer
+                        writers[slot_name] = exp.args[2].args[2]
+                    end
+                end
+            end
+        end
+    end
+    return readers, writers
+end
+
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
 # ----------------------------- Generic functions ---------------------------------
 
@@ -581,6 +624,7 @@ global MultiMethod = multiMethod(Dict(), () -> (), nothing)
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
+    println("ola")
     if !(haskey(generic_registry, generic_function))
         generic = defgeneric(generic_function, parameters)
     else
@@ -609,6 +653,7 @@ end
 
 # macro definition for @defmethod
 macro defmethod(expr...)
+    dump(expr)
     fun_args = []
     fun_args_specializers = []
     args_types = expr[1].args[1].args[2:end]
@@ -926,9 +971,3 @@ let devices = [new(Screen), new(Printer)],
         end
     end
 end
-
-@defclass(CountingClass, [Class], [counter=0])
-
-@defclass(Foo, [], [], metaclass=CountingClass)
-
-@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
