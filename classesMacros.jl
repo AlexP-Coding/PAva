@@ -135,10 +135,28 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
 
                 # isso acho que passa para a macro
                 elseif :reader in transformed_option
-                    println("Created a reader method")
+                    println("Stored a reader method")
+                    #=@defgeneric get_name(o)
+                    @defgeneric get_age(o)
+                    @defgeneric get_friend(o)
+
+                    method_name = transformed_option.second
+
+                    if isa(slot_name, Symbol)
+                        println("Created a reader method $method_name for $slot_name")
+                        @defgeneric $(method_name)(o)
+                    else
+                        slot_name_2 = slot_name.args[1]
+                        println("Created a reader method $method_name for $slot_name_2")
+                        
+                        
+                    end=#
         
                 elseif :writer in transformed_option
-                    println("Created a writer method")
+                    println("Stored a writer method")
+                    #=@defgeneric set_name!(o)
+                    @defgeneric set_age!(o)
+                    @defgeneric set_friend!(o)=#
                 end
             end
 
@@ -491,7 +509,8 @@ end
 
 function print_object(method::multiMethod, io::IO)
     specializers = [class_name(spec) for spec in method_specializers(method)]
-    spec_tuple = tuple(specializers...)
+    specializers_rev = reverse!(specializers)
+    spec_tuple = tuple(specializers_rev...)
     if method.generic_function !== nothing
         return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
     else
@@ -624,13 +643,13 @@ function generic_call(generic::genericFunction, args)
     @assert length(args) == length(getfield(generic, :parameters))
 
     selected_methods = select_applicable_methods(generic, args)
-    println("selected_methods: ", selected_methods)
+    #println("selected_methods: ", selected_methods)
 
     if !no_applicable_method(generic, selected_methods, args)
-        println("Tem!")
+        #println("Tem!")
         return selected_methods[1].procedure(args..., call_next_method(selected_methods[2:end], args), args)
     else
-        println("Nao tem!")
+        #println("Nao tem!")
         return
     end
 end
@@ -644,6 +663,8 @@ end
 function select_applicable_methods(generic, args)
     #applicable_methods = []
     methods = generic_methods(generic)
+
+    #println("methods: ", generic.methods)
 
     argtypes = get_types_in_symbol(args)
     #println(argtypes)
@@ -672,6 +693,7 @@ end
 
 function get_applicable_methods(methods, argtypes)
     applicable_methods = []
+    #println("methods: ", methods)
     for method in methods
         if is_same_type(method_specializers(method), argtypes)
             push!(applicable_methods, method)
@@ -681,15 +703,17 @@ function get_applicable_methods(methods, argtypes)
 end
 
 function is_same_type(method, argtypes)
+    #println("method: ", method)
+    method = reverse!(method)
     for i in 1:length(method)
-        println("method: ", method[i])
-        println("arg: ", argtypes[i])
-        println("cpl: ", getfield(argtypes[i], :class_precedence_list))
+        #println("method: ", method[i])
+        #println("arg: ", argtypes[i])
+        #println("cpl: ", getfield(argtypes[i], :class_precedence_list))
         if !(method[i] in getfield(argtypes[i], :class_precedence_list))
-            println("entrei no false")
+            #println("entrei no false")
             return false
         end
-        println("nao entrei no if")
+        #println("nao entrei no if")
     end
     true
 end
@@ -704,7 +728,7 @@ function get_types_in_symbol(args)
                                     else 
                                         return instance_registry_2[arg]
                                     end), args)
-    println("arg types function: ", arg_types)
+    #println("arg types function: ", arg_types)
 end
 
 function no_applicable_method(generic, selected_methods, args)
@@ -840,6 +864,30 @@ foobar1.d
 @defclass(F, [D, E], [], metaclass=FlavorsClass)
 
 compute_cpl(F)
+
+@defclass(Shape, [], [])
+@defclass(Device, [], [])
+
+@defgeneric draw(shape, device)
+
+@defclass(Line, [Shape], [from, to])
+@defclass(Circle, [Shape], [center, radius])
+@defclass(Screen, [Device], [])
+@defclass(Printer, [Device], [])
+
+@defmethod draw(shape::Line, device::Screen) = println("Drawing a Line on Screen")
+@defmethod draw(shape::Circle, device::Screen) = println("Drawing a Circle on Screen")
+@defmethod draw(shape::Line, device::Printer) = println("Drawing a Line on Printer")
+@defmethod draw(shape::Circle, device::Printer) = println("Drawing a Circle on Printer")
+
+let devices = [new(Screen), new(Printer)],
+    shapes = [new(Line), new(Circle)]
+    for device in devices
+        for shape in shapes
+            draw(shape, device)
+        end
+    end
+end
 
 @defclass(CountingClass, [Class], [counter=0])
 
