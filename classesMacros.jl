@@ -138,20 +138,8 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
                     println("Stored a reader method")
                     #=@defgeneric get_name(o)
                     @defgeneric get_age(o)
-                    @defgeneric get_friend(o)
+                    @defgeneric get_friend(o)=#
 
-                    method_name = transformed_option.second
-
-                    if isa(slot_name, Symbol)
-                        println("Created a reader method $method_name for $slot_name")
-                        @defgeneric $(method_name)(o)
-                    else
-                        slot_name_2 = slot_name.args[1]
-                        println("Created a reader method $method_name for $slot_name_2")
-                        
-                        
-                    end=#
-        
                 elseif :writer in transformed_option
                     println("Stored a writer method")
                     #=@defgeneric set_name!(o)
@@ -534,10 +522,20 @@ end
 # ------ Macro definition for defclass ------
 
 macro defclass(expr...)
+    #=dump(expr)
+    println(expr[3])
+    for expr in expr[3].args
+        println(expr)
+        if length(expr) == 4
+
+        end
+    end=#
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
     end
 end
+
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
 # ----------------------------- Generic functions ---------------------------------
 
@@ -671,24 +669,56 @@ function select_applicable_methods(generic, args)
     # search in the vector for methods that match the argtypes
     #println("generic methods: ", generic.methods)
     applicable_methods = get_applicable_methods(generic.methods, argtypes)
+    
+    #println("not sorted: ", applicable_methods)
+    sorted_methods = applicable_methods
+    sort_methods(sorted_methods, argtypes)
+    #println("sorted: ", sorted_methods)
 
-    #TODO
-    #sortmethods!(applicable_methods)
-    #cpl is critical to sort generic function methods according to the type of the arguments
-    #precedence among applicable methods is determined by left-to-right consideration
-    #of the parameters types, m1 is more specific, if the first parameter of m1 is more specific 
-    #than that the type of the first parameter of m2
+    return sorted_methods
+end
 
-    #example
-    # c1 -> cpl[c1, c2, object, top]
-    # function call: add(c1, c2)
-    # methods: 
-    #          add(c1, c2)
-    #          add(c2, c2)
-    #          
-    # ordered applicable_methods[add(c1, c1), add(c1, c2), add(c2, c1), add(c2, c2)]
+function compare_cpl(type1, type2, cpl)
+    idx1 = findfirst(x -> x == type1, cpl)
+    idx2 = findfirst(x -> x == type2, cpl)
+    #println("idx1: ", idx1)
+    #println("idx2: ", idx2)
+    if idx1 < idx2
+        # first type occurs before the second type in the list
+        return true
+    elseif idx1 > idx2
+        # second type occurs before the first type in the list
+        return false
+    else
+        # are the same type
+        return nothing
+    end
+end
 
-    return applicable_methods
+function comparemethods(m1, m2, argtypes)
+    args1 = reverse!(method_specializers(m1))
+    #println("args1: ", args1)
+    args2 = reverse!(method_specializers(m2))
+    #println("args2: ", args2)
+
+    cpl_list = [getfield(arg, :class_precedence_list) for arg in argtypes]
+    #println("cpl_list: ", cpl_list)
+
+    for (i, (arg1, arg2)) in enumerate(zip(args1, args2))
+        #println("arg1: ", arg1)
+        #println("arg2: ", arg2)
+        #println("cpl_list[i]: ", cpl_list[i])
+        if compare_cpl(arg1, arg2, cpl_list[i]) == true
+            return true
+        elseif compare_cpl(arg1, arg2, cpl_list[i]) == false
+            return false
+        end
+    end
+    return false
+end
+
+function sort_methods(applicable_methods, argtypes)
+    sort!(applicable_methods, lt=(m1, m2) -> comparemethods(m1, m2, argtypes))
 end
 
 function get_applicable_methods(methods, argtypes)
@@ -880,6 +910,14 @@ compute_cpl(F)
 @defmethod draw(shape::Line, device::Printer) = println("Drawing a Line on Printer")
 @defmethod draw(shape::Circle, device::Printer) = println("Drawing a Circle on Printer")
 
+# to test the order of methods
+@defmethod draw(shape::Line, device::Screen) = println("Drawing a Line on Screen")
+@defmethod draw(shape::Line, device::Device) = println("Drawing a Line on Device")
+@defmethod draw(shape::Shape, device::Device) = println("Drawing a Shape on Device")
+@defmethod draw(shape::Shape, device::Screen) = println("Drawing a Shape on Screen")
+
+draw(new(Line), new(Screen))
+
 let devices = [new(Screen), new(Printer)],
     shapes = [new(Line), new(Circle)]
     for device in devices
@@ -894,5 +932,3 @@ end
 @defclass(Foo, [], [], metaclass=CountingClass)
 
 @defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
-
-@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
