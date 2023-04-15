@@ -821,6 +821,34 @@ function no_applicable_method(generic, selected_methods, args)
     end
 end
 
+
+# ----------------- Macro definitions for printing objects -------------------------------------
+
+@defgeneric print_object(classe, io)
+
+@defmethod print_object(classe::Class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+@defmethod print_object(classe::class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+@defmethod print_object(instance::instanceWrap, io::IO) = print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
+
+@defmethod print_object(method::multiMethod, io::IO) = begin
+    specializers = [class_name(spec) for spec in method_specializers(method)]
+    specializers_rev = reverse!(specializers)
+    spec_tuple = tuple(specializers_rev...)
+    if method.generic_function !== nothing
+        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
+    else
+        return print(io,"<MultiMethod>")
+    end
+end
+
+@defmethod print_object(generic::genericFunction, io::IO) = begin
+    if generic_methods(generic) !== nothing
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
+    else
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
+    end
+end
+
 # --------------------- To test -----------------------------------------------------------
 
 @defclass(ComplexNumber, [], [real, imag])
@@ -836,8 +864,6 @@ c1.imag += 3
 
 @defgeneric add(a, b)
 @defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
-
-#@defgeneric print_object(obj, io) TODO
 
 c2 = new(ComplexNumber, real=3, imag=4)
 
