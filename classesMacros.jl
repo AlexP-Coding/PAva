@@ -469,25 +469,25 @@ class_registry[:Class] = Class
 
 #print_object
 
-function Base.show(io::IO, classe::class)
-    print_object(classe, io)
-end
+#function Base.show(io::IO, classe::class)
+#    print_object(classe, io)
+#end
 
 #function print_object(classe::class, io::IO)
 #    return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 #end
 
-function Base.show(io::IO, instance::instanceWrap)
-    print_object(instance, io)
-end
+#function Base.show(io::IO, instance::instanceWrap)
+#    print_object(instance, io)
+#end
 
 #function print_object(instance::instanceWrap, io::IO)
 #    print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
 #end
 
-function Base.show(io::IO, method::multiMethod)
-    print_object(method, io)
-end
+#function Base.show(io::IO, method::multiMethod)
+#    print_object(method, io)
+#end
 
 #function print_object(method::multiMethod, io::IO)
 #    specializers = [class_name(spec) for spec in method_specializers(method)]
@@ -500,9 +500,9 @@ end
 #    end
 #end
 
-function Base.show(io::IO, generic::genericFunction)
-    print_object(generic, io)
-end
+#function Base.show(io::IO, generic::genericFunction)
+#    print_object(generic, io)
+#end
 
 #function print_object(generic::genericFunction, io::IO)
 #    if generic_methods(generic) !== nothing
@@ -565,6 +565,15 @@ function macroproccess_class(expr::Expr)
     return readers, writers
 end
 
+### defclass ###
+
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
 @defclass(CountingClass, [Class], [counter=0])
@@ -827,8 +836,22 @@ end
 @defgeneric print_object(classe, io)
 
 @defmethod print_object(classe::Class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+
+function Base.show(io::IO, classe::Class)
+    print_object(classe, io)
+end
+
 @defmethod print_object(classe::class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+
+function Base.show(io::IO, classe::class)
+    print_object(classe, io)
+end
+
 @defmethod print_object(instance::instanceWrap, io::IO) = print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
+
+function Base.show(io::IO, instance::instanceWrap)
+    print_object(instance, io)
+end
 
 @defmethod print_object(method::multiMethod, io::IO) = begin
     specializers = [class_name(spec) for spec in method_specializers(method)]
@@ -841,12 +864,20 @@ end
     end
 end
 
+function Base.show(io::IO, method::multiMethod)
+    print_object(method, io)
+end
+
 @defmethod print_object(generic::genericFunction, io::IO) = begin
     if generic_methods(generic) !== nothing
         return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
     else
         return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
     end
+end
+
+function Base.show(io::IO, generic::genericFunction)
+    print_object(generic, io)
 end
 
 # --------------------- To test -----------------------------------------------------------
@@ -869,6 +900,11 @@ c2 = new(ComplexNumber, real=3, imag=4)
 
 add(c1, c2)
 
+c2
+@defmethod print_object(c::ComplexNumber, io) = print(io, "$(c.real)$(c.imag < 0 ? "-" : "+")$(abs(c.imag))i")
+c2
+
+
 class_of(c1) === ComplexNumber
 ComplexNumber.direct_slots
 class_of(class_of(c1)) === Class
@@ -881,6 +917,7 @@ class_slots(Class)
 
 ComplexNumber.name
 ComplexNumber.direct_superclasses == [Object]
+
 
 add
 add.name
