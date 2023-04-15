@@ -52,12 +52,20 @@ generic_registry = Dict{Symbol, genericFunction}()
 # ------ Creation of Top, Object and BuiltInClass classes ------
 
 global Top = class(:Top, [], Dict())
+class_registry[:Top] = Top
 
 global Object = class(:Object, [Top], Dict())
 class_registry[:Object] = Object
 
 global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
+append!(getfield(BuiltInClass, :class_precedence_list), [BuiltInClass, Top])
+
+# ------ Creation of Class class ------
+
+global Class = class(:Class, [], Dict())
+class_registry[:Class] = Class
+append!(getfield(Class, :class_precedence_list), [Class, Object, Top])
 
 # ------ Creation of special classes that represent Julia's predefined types with BuiltInClass as metaclass ------
 
@@ -72,6 +80,120 @@ append!(getfield(_Float64, :class_precedence_list), [BuiltInClass, _Float64, Top
 global _String = class(:_String, [], Dict(), [], BuiltInClass)
 class_registry[:_String] = _String
 append!(getfield(_String, :class_precedence_list), [BuiltInClass, _String, Top])
+
+global _IO = class(:_IO, [], Dict(), [], BuiltInClass)
+class_registry[:_IO] = _IO
+append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
+
+# ----------------------------- Generic functions ---------------------------------
+
+function defgeneric(name::Symbol, parameters)
+    println("I entered a generic function.", name)
+    new_generic = genericFunction(name, parameters, [])
+    generic_registry[name] = new_generic
+    return new_generic
+end
+
+function generic_name(generic::genericFunction)
+    getfield(generic, :name)
+end
+
+function generic_parameters(generic::genericFunction)
+    generic.parameters
+end
+
+function generic_methods(generic::genericFunction)
+    generic.methods
+end
+
+global GenericFunction = genericFunction(:GenericFunction, [], [])
+
+# macro definition for @defgeneric
+macro defgeneric(expr...)
+    dump(expr)
+    quote
+        $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end
+
+#@defgeneric print_object(obj, io)
+
+# ----------------------------- Multi method ---------------------------------
+
+function method_generic_function(method::multiMethod)
+    method.generic_function
+end
+
+function method_specializers(method::multiMethod)
+    method.specializers
+end
+
+global MultiMethod = multiMethod(Dict(), () -> (), nothing)
+
+function defmethod(generic_function::Symbol, parameters, specializers, procedure)
+    #if the corresponding generic function does not exist, creates
+    specializers_dict = Dict{Symbol, class}()
+
+    for (p, s) in zip(parameters, specializers)
+        specializers_dict[p] = s
+    end
+
+    new_method = multiMethod(specializers_dict, procedure, generic_function)
+    
+    #println("ola")
+    #if !(haskey(generic_registry, generic_function))
+        #println("entrei aqui")
+        #generic = defgeneric(generic_function, parameters)
+        #@defgeneric generic_function parameters
+    #end
+
+    #method should have the same parameters as corresponding generic function
+    generic = generic_registry[generic_function]
+    #println(generic)
+
+    if !(length(getfield(generic, :parameters)) == length(parameters))
+        error("method does not have same parameters as $(generic.name)")
+    end
+
+    # add method to generic function
+    # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
+    push!(getfield(generic, :methods), new_method)
+
+    return new_method
+end
+
+# macro definition for @defmethod
+macro defmethod(expr...)
+    println("entrei")
+    dump(expr)
+    fun_args = []
+    fun_args_specializers = []
+    args_types = expr[1].args[1].args[2:end]
+    args = []
+    for arg in args_types
+        if isa(arg, Symbol)
+            push!(fun_args, arg)
+            push!(args, arg)
+            push!(fun_args_specializers, Top)
+        else
+            push!(fun_args, arg.args[1])
+            push!(args, arg.args[1])
+            push!(fun_args_specializers, class_registry[arg.args[2]])
+        end
+    end
+    body = expr[1].args[2]
+    name = [expr[1].args[1].args[1]]
+
+    generic_args = vcat(name, fun_args)
+    ex = Expr(:call, generic_args...)
+    
+    quote
+        if !(haskey(generic_registry, $expr[1].args[1].args[1]))
+            @defgeneric $(ex)
+        end
+        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
+    end
+end
 
 # ------ Function definitions ------
 
@@ -191,44 +313,46 @@ function Base.copy(m::class)
     return class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
 end
 
-function allocate_instance(classe::class)
-    # nao deve ser copy
-    # estrutura que tem dicionario
-    instance_classe = copy(classe)
-    #slots_dict = Dict()
-    slots_dict = getfield(instance_classe, :direct_slots)
-    #for (slot, value) in getfield(instance_classe, :direct_slots)
-    #    slots_dict[slot] = nothing
-    #end
-    instance = instanceWrap(slots_dict)
-    #push!(instance_registry, instance)
-    instance_registry_2[instance] = instance_classe
-    return instance
-end
+@defmethod allocate_instance(classe::Class) =
+    begin
+        # nao deve ser copy
+        # estrutura que tem dicionario
+        instance_classe = copy(classe)
+        #slots_dict = Dict()
+        slots_dict = getfield(instance_classe, :direct_slots)
+        #for (slot, value) in getfield(instance_classe, :direct_slots)
+        #    slots_dict[slot] = nothing
+        #end
+        instance = instanceWrap(slots_dict)
+        #push!(instance_registry, instance)
+        instance_registry_2[instance] = instance_classe
+        return instance
+    end
 
-function compute_cpl(c::class)
-    cpl = Vector{class}()
-    queue = [c]
-    visited = Set{class}(queue)
-    while !isempty(queue)
-        current = popfirst!(queue)
-        push!(cpl, current)
-        for superclass in getfield(current, :direct_superclasses)
-            if(superclass != Object)
-                if !(superclass in visited)
-                    push!(queue, superclass)
-                    push!(visited, superclass)
+@defmethod compute_cpl(c::Class) =
+    begin
+        cpl = Vector{class}()
+        queue = [c]
+        visited = Set{class}(queue)
+        while !isempty(queue)
+            current = popfirst!(queue)
+            push!(cpl, current)
+            for superclass in getfield(current, :direct_superclasses)
+                if(superclass != Object)
+                    if !(superclass in visited)
+                        push!(queue, superclass)
+                        push!(visited, superclass)
+                    end
                 end
             end
         end
-    end
-    if c == BuiltInClass
+        if c == BuiltInClass
+            return cpl
+        end
+        push!(cpl, Object)
+        push!(cpl, Top)
         return cpl
     end
-    push!(cpl, Object)
-    push!(cpl, Top)
-    return cpl
-end
 
 function initialize(instance::instanceWrap; kwargs...)
     classe = instance_registry_2[instance]
@@ -264,32 +388,33 @@ function new(classe::class; kwargs...)
     return instance
 end
 
-function compute_slots(classe:: class)
-    all_slots = Vector{Symbol}()
-    append!(all_slots, keys(getfield(classe, :direct_slots)))
-    cpl = compute_cpl(classe)
-    #println("Printing CPL:")
-    #println(cpl)
+@defmethod compute_slots(classe::Class) =
+    begin
+        all_slots = Vector{Symbol}()
+        append!(all_slots, keys(getfield(classe, :direct_slots)))
+        cpl = compute_cpl(classe)
+        #println("Printing CPL:")
+        #println(cpl)
 
-    for superclass in cpl
-        #println(superclass)
-        sc_name = getfield(superclass, :name)
-        #println(sc_name)
-        if sc_name != Object && sc_name != Top && sc_name != getfield(classe, :name)
-            #println(sc_name in all_slots)
-            sc_keys = keys(getfield(superclass, :direct_slots))
-            for key in sc_keys
-                #if !(key in keys(getfield(classe, :direct_slots)))
-                    append!(all_slots, [key])
-                #end
+        for superclass in cpl
+            #println(superclass)
+            sc_name = getfield(superclass, :name)
+            #println(sc_name)
+            if sc_name != Object && sc_name != Top && sc_name != getfield(classe, :name)
+                #println(sc_name in all_slots)
+                sc_keys = keys(getfield(superclass, :direct_slots))
+                for key in sc_keys
+                    #if !(key in keys(getfield(classe, :direct_slots)))
+                        append!(all_slots, [key])
+                    #end
+                end
             end
         end
-    end
 
-    #println("Printing all slots:")
-    #println(all_slots)
-    return all_slots
-end
+        #println("Printing all slots:")
+        #println(all_slots)
+        return all_slots
+    end
 
 function Base.getproperty(method::multiMethod, slot::Symbol)
     if slot == :slots
@@ -436,6 +561,7 @@ function class_of(x)
         return _String
     end
 end
+    
 
 function class_name(classe::class) 
     getfield(classe, :name)
@@ -457,20 +583,14 @@ function class_direct_superclasses(classe::class)
     classe.direct_superclasses
 end
 
-# ------ Creation of Class class ------
-
-global Class = defclass(:Class, [], [])
-class_registry[:Class] = Class
-
 # ------ Function definitions for printing objects ------
 
-#@defmethod print_object(classe::Class, io) = 
-#    print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+#@defmethod print_object(classe::Class, io) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 
 #print_object
 
 function Base.show(io::IO, classe::class)
-    return print_object(classe, io)
+    print_object(classe, io)
 end
 
 function print_object(classe::class, io::IO)
@@ -515,48 +635,76 @@ end
 # ------ Macro definition for defclass ------
 
 macro defclass(expr...)
-    #readers, writers = macroproccess_class(expr[3])
-    #println(readers, " and ", writers)
+    readers, writers = macroproccess_class(expr[3])
+    println(readers, " and ", writers)
 
-    #class_name = expr[1]
-    #println(class_name)
+    exp_readers = []
+    name = expr[1]
+
+    #for (slot, method) in readers
+        #println(slot, method)
+    #    first = Expr(:call, :($method), Expr(:(::), :(o), :($name)))
+    #    dump(first)
+    #    body = Expr(:block, Expr(:., :(o), :($slot)))
+    #    dump(body)
+    #end
+
+    #=for (slot, method) in readers
+        exp = Expr(:(=),
+                Expr(:call,
+                    :($method),
+                    Expr(:(::),
+                        :(o),
+                        :($name))
+                ),
+                Expr(:block,
+                    Expr(:(.), :(o), :($slot))
+                )
+            )
+        push!(exp_readers, exp)
+    end
+
+    println(exp_readers)=#
 
     quote
         #println("entrei")
+        # @defmethod $(exp)
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
 
-        #=for (slot, method) in $readers
-            println("Key: $slot, Value: $method")
-            #@defmethod :(method(o::class_name) = o.$(slot))
+        #=for exp in $exp_readers
+            @defmethod $(exp)
         end=#
     end
 end
 
 function macroproccess_class(expr::Expr)
+    #dump(expr)
     readers = Dict()
     writers = Dict()
     if length(expr.args) > 0
-        if expr.args[1].head == :vect
-            for exp in expr.args
-                if exp.args[1] isa Symbol
-                    slot_name = exp.args[1]
-                else
-                    slot_name = exp.args[1].args[1]
-                end
-                if length(exp.args) == 3 || length(exp.args) == 4
-                    if exp.args[2].args[1] == :reader
-                        readers[slot_name] = exp.args[2].args[2]
+        if expr.args[1] isa Expr
+            if expr.args[1].head == :vect
+                for exp in expr.args
+                    if exp.args[1] isa Symbol
+                        slot_name = exp.args[1]
+                    else
+                        slot_name = exp.args[1].args[1]
                     end
+                    if length(exp.args) == 3 || length(exp.args) == 4
+                        if exp.args[2].args[1] == :reader
+                            readers[slot_name] = exp.args[2].args[2]
+                        end
 
-                    if exp.args[3].args[1] == :writer
-                        writers[slot_name] = exp.args[3].args[2]
-                    end
+                        if exp.args[3].args[1] == :writer
+                            writers[slot_name] = exp.args[3].args[2]
+                        end
 
-                elseif length(exp.args) == 2
-                    if exp.args[2].args[1] == :reader
-                        readers[slot_name] = exp.args[2].args[2]
-                    elseif exp.args[2].args[1] == :writer
-                        writers[slot_name] = exp.args[2].args[2]
+                    elseif length(exp.args) == 2
+                        if exp.args[2].args[1] == :reader
+                            readers[slot_name] = exp.args[2].args[2]
+                        elseif exp.args[2].args[1] == :writer
+                            writers[slot_name] = exp.args[2].args[2]
+                        end
                     end
                 end
             end
@@ -573,122 +721,13 @@ end
 
 @defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
-# ----------------------------- Generic functions ---------------------------------
-
-function defgeneric(name::Symbol, parameters)
-    println("I entered a generic function.", name)
-    new_generic = genericFunction(name, parameters, [])
-    generic_registry[name] = new_generic
-    return new_generic
-end
-
-function generic_name(generic::genericFunction)
-    getfield(generic, :name)
-end
-
-function generic_parameters(generic::genericFunction)
-    generic.parameters
-end
-
-function generic_methods(generic::genericFunction)
-    generic.methods
-end
-
-global GenericFunction = genericFunction(:GenericFunction, [], [])
-
-# macro definition for @defgeneric
-macro defgeneric(expr...)
-    dump(expr)
-    quote
-        $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
-    end
-end
-
-@defgeneric print_object(obj, io)
-
-# ----------------------------- Multi method ---------------------------------
-
-function method_generic_function(method::multiMethod)
-    method.generic_function
-end
-
-function method_specializers(method::multiMethod)
-    method.specializers
-end
-
-global MultiMethod = multiMethod(Dict(), () -> (), nothing)
-
-function defmethod(generic_function::Symbol, parameters, specializers, procedure)
-    #if the corresponding generic function does not exist, creates
-    specializers_dict = Dict{Symbol, class}()
-
-    for (p, s) in zip(parameters, specializers)
-        specializers_dict[p] = s
-    end
-
-    new_method = multiMethod(specializers_dict, procedure, generic_function)
-    
-    #println("ola")
-    #if !(haskey(generic_registry, generic_function))
-        #println("entrei aqui")
-        #generic = defgeneric(generic_function, parameters)
-        #@defgeneric generic_function parameters
-    #end
-
-    #method should have the same parameters as corresponding generic function
-    generic = generic_registry[generic_function]
-    #println(generic)
-
-    if !(length(getfield(generic, :parameters)) == length(parameters))
-        error("method does not have same parameters as $(generic.name)")
-    end
-
-    # add method to generic function
-    # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
-    push!(getfield(generic, :methods), new_method)
-
-    return new_method
-end
-
-# macro definition for @defmethod
-macro defmethod(expr...)
-    dump(expr)
-    fun_args = []
-    fun_args_specializers = []
-    args_types = expr[1].args[1].args[2:end]
-    args = []
-    for arg in args_types
-        if isa(arg, Symbol)
-            push!(fun_args, arg)
-            push!(args, arg)
-            push!(fun_args_specializers, Top)
-        else
-            push!(fun_args, arg.args[1])
-            push!(args, arg.args[1])
-            push!(fun_args_specializers, class_registry[arg.args[2]])
-        end
-    end
-    body = expr[1].args[2]
-    name = [expr[1].args[1].args[1]]
-
-    generic_args = vcat(name, fun_args)
-    ex = Expr(:call, generic_args...)
-    
-    quote
-        if !(haskey(generic_registry, $expr[1].args[1].args[1]))
-            @defgeneric $(ex)
-        end
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
-    end
-end
-
 # ------ Generic function call ------
 
 (x::genericFunction)(args...) = generic_call(x, args)
 (x::multiMethod)(args...) = x.procedure(args...)
 
 function generic_call(generic::genericFunction, args)
-    #println("entrei")
+    println("entrei")
     @assert length(args) == length(getfield(generic, :parameters))
 
     selected_methods = select_applicable_methods(generic, args)
@@ -721,10 +760,10 @@ function select_applicable_methods(generic, args)
     #println("generic methods: ", generic.methods)
     applicable_methods = get_applicable_methods(generic.methods, argtypes)
     
-    #println("not sorted: ", applicable_methods)
+    println("not sorted: ", applicable_methods)
     sorted_methods = applicable_methods
     sort_methods(sorted_methods, argtypes)
-    #println("sorted: ", sorted_methods)
+    println("sorted: ", sorted_methods)
 
     return sorted_methods
 end
@@ -806,6 +845,12 @@ function get_types_in_symbol(args)
                                         return _Float64
                                     elseif arg isa String
                                         return _String
+                                    elseif arg isa class
+                                        return Class
+                                    elseif arg isa genericFunction
+                                        return GenericFunction
+                                    elseif arg isa multiMethod
+                                        return MultiMethod
                                     else 
                                         return instance_registry_2[arg]
                                     end), args)
@@ -883,6 +928,9 @@ metaclass=UndoableClass)
 Person
 class_of(Person)
 class_of(class_of(Person))
+
+@defmethod get_name(o::Person) = o.name
+@defmethod set_name!(o::Person, v) = o.name = v
 
 add(123, 456)
 
