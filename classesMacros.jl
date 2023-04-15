@@ -470,47 +470,47 @@ class_registry[:Class] = Class
 #print_object
 
 function Base.show(io::IO, classe::class)
-    return print_object(classe, io)
+    print_object(classe, io)
 end
 
-function print_object(classe::class, io::IO)
-    return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
-end
+#function print_object(classe::class, io::IO)
+#    return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+#end
 
 function Base.show(io::IO, instance::instanceWrap)
-    return print_object(instance, io)
+    print_object(instance, io)
 end
 
-function print_object(instance::instanceWrap, io::IO)
-    print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
-end
+#function print_object(instance::instanceWrap, io::IO)
+#    print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
+#end
 
 function Base.show(io::IO, method::multiMethod)
-    return print_object(method, io)
+    print_object(method, io)
 end
 
-function print_object(method::multiMethod, io::IO)
-    specializers = [class_name(spec) for spec in method_specializers(method)]
-    specializers_rev = reverse!(specializers)
-    spec_tuple = tuple(specializers_rev...)
-    if method.generic_function !== nothing
-        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
-    else
-        return print(io,"<MultiMethod>")
-    end
-end
+#function print_object(method::multiMethod, io::IO)
+#    specializers = [class_name(spec) for spec in method_specializers(method)]
+#    specializers_rev = reverse!(specializers)
+#    spec_tuple = tuple(specializers_rev...)
+#    if method.generic_function !== nothing
+#        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
+#    else
+#        return print(io,"<MultiMethod>")
+#    end
+#end
 
 function Base.show(io::IO, generic::genericFunction)
-    return print_object(generic, io)
+    print_object(generic, io)
 end
 
-function print_object(generic::genericFunction, io::IO)
-    if generic_methods(generic) !== nothing
-        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
-    else
-        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
-    end
-end
+#function print_object(generic::genericFunction, io::IO)
+#    if generic_methods(generic) !== nothing
+#        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
+#    else
+#        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
+#    end
+#end
 
 # ------ Macro definition for defclass ------
 
@@ -604,7 +604,7 @@ macro defgeneric(expr...)
     end
 end
 
-@defgeneric print_object(obj, io)
+#@defgeneric print_object(obj, io)
 
 # ----------------------------- Multi method ---------------------------------
 
