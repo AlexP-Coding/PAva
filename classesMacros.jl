@@ -464,25 +464,20 @@ class_registry[:Class] = Class
 
 # ------ Function definitions for printing objects ------
 
+#@defmethod print_object(classe::Class, io) = 
+#    print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+
+#print_object
+
 function Base.show(io::IO, classe::class)
     return print_object(classe, io)
 end
 
 function print_object(classe::class, io::IO)
-    if getfield(classe, :metaclass) !== nothing
-        #println(class_name(classe))
-        return print(io, "<$(class_name(getfield(classe, :metaclass))) $(class_name(classe))>")
-    #elseif getfield(classe, :name) == getfield(BuiltInClass, :name)
-        #println("entrei1")
-        #return println("<$(class_name(class_of(classe))) $(class_name(classe))>")
-    else
-        #println("entrei2")
-        return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
-    end
+    return print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 end
 
 function Base.show(io::IO, instance::instanceWrap)
-    # println("show")
     return print_object(instance, io)
 end
 
@@ -491,7 +486,6 @@ function print_object(instance::instanceWrap, io::IO)
 end
 
 function Base.show(io::IO, method::multiMethod)
-    # println("show")
     return print_object(method, io)
 end
 
@@ -507,7 +501,6 @@ function print_object(method::multiMethod, io::IO)
 end
 
 function Base.show(io::IO, generic::genericFunction)
-    # println("show")
     return print_object(generic, io)
 end
 
@@ -522,10 +515,10 @@ end
 # ------ Macro definition for defclass ------
 
 macro defclass(expr...)
-    readers, writers = macroproccess_class(expr[3])
-    println(readers, " and ", writers)
+    #readers, writers = macroproccess_class(expr[3])
+    #println(readers, " and ", writers)
 
-    class_name = expr[1]
+    #class_name = expr[1]
     #println(class_name)
 
     quote
@@ -583,7 +576,7 @@ end
 # ----------------------------- Generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
-    #println("I entered a generic function.")
+    println("I entered a generic function.", name)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
@@ -605,10 +598,13 @@ global GenericFunction = genericFunction(:GenericFunction, [], [])
 
 # macro definition for @defgeneric
 macro defgeneric(expr...)
+    dump(expr)
     quote
         $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
     end
 end
+
+@defgeneric print_object(obj, io)
 
 # ----------------------------- Multi method ---------------------------------
 
@@ -624,18 +620,6 @@ global MultiMethod = multiMethod(Dict(), () -> (), nothing)
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
-    println("ola")
-    if !(haskey(generic_registry, generic_function))
-        generic = defgeneric(generic_function, parameters)
-    else
-        #method should have the same parameters as corresponding generic function
-        generic = generic_registry[generic_function]
-
-        if !(getfield(generic, :parameters) == parameters)
-            error("method does not have same parameters as $(generic.name)")
-        end
-    end
-
     specializers_dict = Dict{Symbol, class}()
 
     for (p, s) in zip(parameters, specializers)
@@ -643,6 +627,21 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
     end
 
     new_method = multiMethod(specializers_dict, procedure, generic_function)
+    
+    #println("ola")
+    #if !(haskey(generic_registry, generic_function))
+        #println("entrei aqui")
+        #generic = defgeneric(generic_function, parameters)
+        #@defgeneric generic_function parameters
+    #end
+
+    #method should have the same parameters as corresponding generic function
+    generic = generic_registry[generic_function]
+    #println(generic)
+
+    if !(length(getfield(generic, :parameters)) == length(parameters))
+        error("method does not have same parameters as $(generic.name)")
+    end
 
     # add method to generic function
     # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
@@ -670,9 +669,15 @@ macro defmethod(expr...)
         end
     end
     body = expr[1].args[2]
-    #println("body: ", expr[1].args[2].args[2])
+    name = [expr[1].args[1].args[1]]
 
+    generic_args = vcat(name, fun_args)
+    ex = Expr(:call, generic_args...)
+    
     quote
+        if !(haskey(generic_registry, $expr[1].args[1].args[1]))
+            @defgeneric $(ex)
+        end
         defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
     end
 end
@@ -683,6 +688,7 @@ end
 (x::multiMethod)(args...) = x.procedure(args...)
 
 function generic_call(generic::genericFunction, args)
+    #println("entrei")
     @assert length(args) == length(getfield(generic, :parameters))
 
     selected_methods = select_applicable_methods(generic, args)
