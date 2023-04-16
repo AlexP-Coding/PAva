@@ -7,8 +7,12 @@ macro defgeneric(expr...)
 end
 
 function defgeneric(name::Symbol, parameters)
-    new_generic = genericFunction(name, parameters, [])
-    generic_registry[name] = new_generic
+    if !(haskey(generic_registry, name))
+        new_generic = genericFunction(name, parameters, [])
+        generic_registry[name] = new_generic
+    else
+        new_generic = generic_registry[name]
+    end
     return new_generic
 end
 

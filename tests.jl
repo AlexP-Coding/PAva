@@ -20,6 +20,8 @@ c1.real
 c1.imag
 c1.imag += 3
 
+@defgeneric print_object(obj, io)
+
 @defgeneric add(a, b)
 @defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
