@@ -63,7 +63,7 @@ generic_registry[:GenericFunction] = GenericFunction
 function defgeneric(name::Symbol, parameters)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
-    println(new_generic)
+    #println(new_generic)
     return new_generic
 end
 
@@ -644,15 +644,17 @@ function generic_call(generic::genericFunction, args)
     selected_methods = select_applicable_methods(generic, args)
 
     if !no_applicable_method(generic, selected_methods, args)
-        return selected_methods[1].procedure(args..., selected_methods[2:end], args)
+        return selected_methods[1](args..., selected_methods[2:end], args)
     else
         return
     end
 end
 
-function call_next_method(next_methods, args)
-    for idx in 1:length(next_methods)
-        next_methods[idx](args..., next_methods[idx+1:end], args)
+function call_next_method()
+    quote
+        if length(next_methods) != 0
+            next_methods[1](fargs..., next_methods[2:end], fargs)
+        end
     end
 end
 
@@ -675,7 +677,7 @@ function compare_cpl(type1, type2, cpl)
         return false
     else
         # are the same type
-        return nothing
+        return true
     end
 end
 
@@ -685,13 +687,9 @@ function comparemethods(m1, m2, argtypes)
     cpl_list = [getfield(arg, :class_precedence_list) for arg in argtypes]
 
     for (i, (arg1, arg2)) in enumerate(zip(args1, args2))
-        if compare_cpl(arg1, arg2, cpl_list[i]) == true
-            return true
-        elseif compare_cpl(arg1, arg2, cpl_list[i]) == false
-            return false
-        end
+        return compare_cpl(arg1, arg2, cpl_list[i])
     end
-    return false
+    return true
 end
 
 sort_methods(applicable_methods, argtypes) = sort!(applicable_methods, lt=(m1, m2) -> comparemethods(m1, m2, argtypes))
@@ -708,7 +706,11 @@ end
 
 function is_same_type(method, argtypes)
     method = method
+    
     for i in 1:length(method)
+        #println("method[i]: ", method[i])
+        #println("argtypes[i]: ", argtypes[i])
+        #println("cpl: ", getfield(argtypes[i], :class_precedence_list))
         if argtypes[i] isa genericFunction || argtypes[i] isa multiMethod
             if method[i] != argtypes[i]
                 return false
