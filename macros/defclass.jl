@@ -8,7 +8,6 @@ macro defclass(expr...)
 end
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
-    #slots_dict = Dict(slot => nothing for slot in direct_slots)
     slots_dict = Dict()
     if length(direct_slots) == 2
         metaclass = direct_slots[2]
@@ -28,62 +27,33 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
                 end
             end
         end
-        # only slot name is provided
         if isa(slot, Symbol)
             slots_dict[slot] = nothing
-        # slot name includes reader, writer or initform
         elseif slot.head === :vect
             slot_name = slot.args[1]
             slot_options = slot.args[2:end]
 
             if isa(slot_name, Symbol)
-                #slots_dict[slot] = direct_slots[slot]
                 slots_dict[slot_name] = nothing
             else
-                #println("Vector with Name and Value")
                 slots_dict[slot_name.args[1]] = slot_name.args[2]
             end
             
             for option in slot_options
                 transformed_option = Pair(option.args[1], option.args[2])
-                #if haskey(slot_options, :initform)
                 if :initform in transformed_option
-                    #println("Vector slot name as initform")
-                    #slots_dict[slot_name] = slot_options[:initform]
                     slots_dict[slot_name] = transformed_option.second
-                #if haskey(slot_options, :reader)
-
-                # isso acho que passa para a macro
-                elseif :reader in transformed_option
-                    println("Stored a reader method")
-                    #=@defgeneric get_name(o)
-                    @defgeneric get_age(o)
-                    @defgeneric get_friend(o)=#
-
-                elseif :writer in transformed_option
-                    println("Stored a writer method")
-                    #=@defgeneric set_name!(o)
-                    @defgeneric set_age!(o)
-                    @defgeneric set_friend!(o)=#
                 end
             end
 
-        # slot name with iniform value are provided
         elseif isa(slot.head, Symbol)
-            #println("Name and Value")
-            #slots_dict[slot] = direct_slots[slot]
-            #doing it like a pair
             transformed_slot = Pair(slot.args[1], slot.args[2])
             slots_dict[transformed_slot.first] = transformed_slot.second
         end
     end
     
-    
-    #slots_dict = Dict(direct_slots[1] => nothing for slot in direct_slots)
-    
     new_superclasses = Vector{class}()
     
-    # all classes inherit, directly or indirectly from Object class
     for classe in direct_superclasses
         class_obj = class_registry[classe]
         push!(new_superclasses, class_obj)
@@ -95,14 +65,11 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     end
 
     if length(direct_slots) == 2
-        # a metaclass was received
-        # name becames the metaclass name??
         class_objet = class_registry[metaclass.args[2]]
         new_classe = class(name, new_superclasses, slots_dict, [], class_objet)
     else
         new_classe = class(name, new_superclasses, slots_dict, [])
     end
-    #println("estou aqui")
     class_registry[name] = new_classe
     return new_classe
 end

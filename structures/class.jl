@@ -12,7 +12,6 @@ end
 class_registry = Dict{Symbol, class}()
 
 # ------ Creation of Top, Object and BuiltInClass classes ------
-
 global Top = class(:Top, [], Dict())
 class_registry[:Top] = Top
 
@@ -29,7 +28,6 @@ class_registry[:Class] = Class
 append!(getfield(Class, :class_precedence_list), [Class, Object, Top])
 
 # ------ Creation of special classes that represent Julia's predefined types with BuiltInClass as metaclass ------
-
 global _Int64 = class(:_Int64, [], Dict(), [], BuiltInClass)
 class_registry[:_Int64] = _Int64
 append!(getfield(_Int64, :class_precedence_list), [BuiltInClass, _Int64, Top])
@@ -46,6 +44,7 @@ global _IO = class(:_IO, [], Dict(), [], BuiltInClass)
 class_registry[:_IO] = _IO
 append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
 
+# ------ Base definitions and introspection functions ------
 Base.copy(m::class) = class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
 
 Base.show(io::IO, classe::class) = print_object(classe, io)

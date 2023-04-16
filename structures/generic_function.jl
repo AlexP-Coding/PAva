@@ -19,6 +19,7 @@ end
 global GenericFunction = genericFunction(:GenericFunction, [], [])
 generic_registry[:GenericFunction] = GenericFunction
 
+# ------ Base definitions and introspection functions ------
 generic_name(generic::genericFunction) = getfield(generic, :name)
 
 generic_parameters(generic::genericFunction) = generic.parameters
