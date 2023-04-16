@@ -25,6 +25,7 @@ class_registry[:Top] = Top
 
 global Object = class(:Object, [Top], Dict())
 class_registry[:Object] = Object
+append!(getfield(Object, :class_precedence_list), [Object, Top])
 
 global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
@@ -556,13 +557,10 @@ begin
 end
 
 Base.show(io::IO, method::multiMethod) = print_object(method, io)
-    
-#=
+
+@defmethod print_object(obj::Object, io) = print(io,"<$(class_name(class_of(obj))) $(string(objectid(obj), base=62))>")
 
 Base.show(io::IO, instance::instanceWrap) = print_object(instance, io)
-
-print_object(instance::instanceWrap, io::IO) = print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
-=#
 
 # ------ Macro definition for defclass ------
 
@@ -645,7 +643,7 @@ function generic_call(generic::genericFunction, args)
     selected_methods = select_applicable_methods(generic, args)
 
     if !no_applicable_method(generic, selected_methods, args)
-        return selected_methods[1].procedure(args..., call_next_method(selected_methods[2:end], args), args)
+        return selected_methods[1].procedure(args..., selected_methods[2:end], args)
     else
         return
     end
