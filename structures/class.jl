@@ -41,10 +41,6 @@ global _String = class(:_String, [], Dict(), [], BuiltInClass)
 class_registry[:_String] = _String
 append!(getfield(_String, :class_precedence_list), [BuiltInClass, _String, Top])
 
-global _IO = class(:_IO, [], Dict(), [], BuiltInClass)
-class_registry[:_IO] = _IO
-append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
-
 # ------ Base definitions and introspection functions ------
 Base.copy(m::class) = class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
 

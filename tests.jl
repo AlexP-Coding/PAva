@@ -78,6 +78,7 @@ class_of(Person)
 class_of(class_of(Person))
 get_name(new(Person))
 set_name!(new(Person), 4)
+get_age(new(Person))
 
 add(123, 456)
 
@@ -174,5 +175,33 @@ let devices = [new(Screen), new(Printer)],
         for shape in shapes
             draw(shape, device)
         end
+    end
+end
+
+@defclass(ColorMixin, [],
+[[color, reader=get_color, writer=set_color!]])
+
+@defmethod draw(s::ColorMixin, d::Device) =
+    let previous_color = get_device_color(d)
+    set_device_color!(d, get_color(s))
+    call_next_method()
+    set_device_color!(d, previous_color)
+    end
+
+@defclass(ColoredLine, [ColorMixin, Line], [])
+@defclass(ColoredCircle, [ColorMixin, Circle], [])
+@defclass(ColoredPrinter, [Printer], [[ink=:black, reader=get_device_color, writer=_set_device_color!]])
+
+@defmethod set_device_color!(d::ColoredPrinter, color) = begin
+    println("Changing printer ink color to $color")
+    _set_device_color!(d, color)
+    end
+
+draw.methods
+
+let shapes = [new(Line), new(ColoredCircle, color=:red), new(ColoredLine, color=:blue)],
+        printer = new(ColoredPrinter, ink=:black)
+    for shape in shapes
+        draw(shape, printer)
     end
 end

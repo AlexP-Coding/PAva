@@ -292,15 +292,17 @@ function generic_call(generic::genericFunction, args)
     selected_methods = select_applicable_methods(generic, args)
 
     if !no_applicable_method(generic, selected_methods, args)
-        return selected_methods[1].procedure(args..., selected_methods[2:end], args) 
+        return selected_methods[1](args..., selected_methods[2:end], args) 
     else
         return
     end
 end
 
-function call_next_method(next_methods, args)
-    for idx in 1:length(next_methods)
-        next_methods[idx](args..., next_methods[idx+1:end], args)
+function call_next_method()
+    quote
+        if length(next_methods) != 0
+            next_methods[1](fargs..., next_methods[2:end], fargs)
+        end
     end
 end
 
