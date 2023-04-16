@@ -29,9 +29,10 @@ c1.imag += 3
 @defgeneric add(a, b)
 @defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
-#@defgeneric print_object(obj, io) TODO
-
 c2 = new(ComplexNumber, real=3, imag=4)
+
+@defmethod print_object(c::ComplexNumber, io) = print(io, "$(c.real)$(c.imag < 0 ? "-" : "+")$(abs(c.imag))i")
+c1
 
 add(c1, c2)
 

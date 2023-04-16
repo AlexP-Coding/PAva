@@ -63,6 +63,7 @@ generic_registry[:GenericFunction] = GenericFunction
 function defgeneric(name::Symbol, parameters)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
+    println(new_generic)
     return new_generic
 end
 
