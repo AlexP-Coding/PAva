@@ -1,4 +1,3 @@
-include("compute_cpl.jl")
 include("../structures/struct_collection.jl")
 
 @defmethod compute_slots(classe::Class) =

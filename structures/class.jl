@@ -17,6 +17,7 @@ class_registry[:Top] = Top
 
 global Object = class(:Object, [Top], Dict())
 class_registry[:Object] = Object
+append!(getfield(Object, :class_precedence_list), [Object, Top]) 
 
 global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
@@ -46,10 +47,6 @@ append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
 
 # ------ Base definitions and introspection functions ------
 Base.copy(m::class) = class(getfield(m, :name), copy(getfield(m, :direct_superclasses)), copy(getfield(m, :direct_slots)), copy(getfield(m, :class_precedence_list)), getfield(m, :metaclass))
-
-Base.show(io::IO, classe::class) = print_object(classe, io)
-
-print_object(classe::class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 
 class_name(classe::class) = getfield(classe, :name)
 

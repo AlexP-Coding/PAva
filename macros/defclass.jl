@@ -1,10 +1,36 @@
+include("defmethod.jl")
+
 macro defclass(expr...)
     readers, writers = macroproccess_class(expr[3])
-    println(readers, " and ", writers)
 
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
+
+        esc(
+            for (slot, method) in $readers
+                call_defmethod_reader(slot, method, $expr[1])
+            end
+        )
+
+        esc(
+            for (slot, method) in $writers
+                call_defmethod_writer(slot, method, $expr[1])
+            end
+        )
+        $(esc(expr[1]))
     end
+end
+
+function call_defmethod_reader(slot, method, classname)
+    eval(quote
+        @defmethod $method(o::$classname) = o.$slot
+    end)
+end
+
+function call_defmethod_writer(slot, method, classname)
+    eval(quote
+        @defmethod $method(o::$classname, v) = o.$slot = v
+    end)
 end
 
 function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)

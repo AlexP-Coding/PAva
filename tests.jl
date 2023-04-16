@@ -1,5 +1,20 @@
 include("main.jl")
 
+print_object.methods
+
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+get_foo(new(Foo))
+set_foo!(new(Foo), 4)
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
+
+get_color(new(ColorMixin))
+
 @defclass(ComplexNumber, [], [real, imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
@@ -14,9 +29,10 @@ c1.imag += 3
 @defgeneric add(a, b)
 @defmethod add(a::ComplexNumber, b::ComplexNumber) = new(ComplexNumber, real=(a.real + b.real), imag=(a.imag + b.imag))
 
-#@defgeneric print_object(obj, io) TODO
-
 c2 = new(ComplexNumber, real=3, imag=4)
+
+@defmethod print_object(c::ComplexNumber, io) = print(io, "$(c.real)$(c.imag < 0 ? "-" : "+")$(abs(c.imag))i")
+c1
 
 add(c1, c2)
 
@@ -60,15 +76,16 @@ metaclass=UndoableClass)
 Person
 class_of(Person)
 class_of(class_of(Person))
-
-@defmethod get_name(o::Person) = o.name
-@defmethod set_name!(o::Person, v) = o.name = v
+get_name(new(Person))
+set_name!(new(Person), 4)
 
 add(123, 456)
 
 @defclass(Circle, [], [center, radius])
+
 @defclass(ColorMixin, [], [color])
 @defclass(ColoredCircle, [ColorMixin, Circle], [])
+cc = new(ColoredCircle)
 
 # class hierarchy
 ColoredCircle.direct_superclasses
@@ -100,8 +117,6 @@ class_direct_slots(ColoredCircle)
 class_slots(ColoredCircle)
 class_direct_superclasses(ColoredCircle)
 class_cpl(ColoredCircle)
-#generic_methods(draw)
-#method_specializers(generic_methods(draw)[1])
 
 @defclass(Foo, [], [a=1, b=2])
 @defclass(Bar, [], [b=3, c=4])
@@ -140,6 +155,10 @@ compute_cpl(F)
 @defmethod draw(shape::Circle, device::Screen) = println("Drawing a Circle on Screen")
 @defmethod draw(shape::Line, device::Printer) = println("Drawing a Line on Printer")
 @defmethod draw(shape::Circle, device::Printer) = println("Drawing a Circle on Printer")
+
+generic_methods(draw)
+
+method_specializers(generic_methods(draw)[1])
 
 # to test the order of methods
 @defmethod draw(shape::Line, device::Screen) = println("Drawing a Line on Screen")

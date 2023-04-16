@@ -13,20 +13,30 @@ instance_registry = Dict{instanceWrap, class}()
 
 # ------ Function definitions ------
 
-function initialize(instance::instanceWrap; kwargs...)
-    classe = instance_registry[instance]
+@defmethod initialize(classe::Class, initargs) =
+begin
     for super_class in getfield(classe, :direct_superclasses)
         for super_slot in getfield(super_class, :direct_slots)
-            if haskey(kwargs, super_slot.first)
-                getfield(super_class, :direct_slots)[super_slot.first] = kwargs[super_slot.first]
+            for arg in initargs
+                if arg.first == super_slot.first
+                    getfield(super_class, :direct_slots)[super_slot.first] = arg.second
+                end
             end
         end
     end
     for (slot, _) in getfield(classe, :direct_slots)
-        if haskey(kwargs, slot)
-            getfield(classe, :direct_slots)[slot] = kwargs[slot]
-            if haskey(getfield(instance, :classtoinstance), slot)
-                getfield(instance, :classtoinstance)[slot] = kwargs[slot]
+        for arg in initargs
+            if arg.first == slot
+                getfield(classe, :direct_slots)[slot] = arg.second
+                instance = nothing
+                for (k, v) in instance_registry
+                    if v == classe
+                        instance = k
+                    end
+                end 
+                if haskey(getfield(instance, :classtoinstance), slot)
+                    getfield(instance, :classtoinstance)[slot] = arg.second
+                end
             end
         end
     end
@@ -35,7 +45,8 @@ end
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     instance_classe = instance_registry[instance]
-    initialize(instance; kwargs...)
+    initargs = [kwargs...] 
+    initialize(instance_classe, initargs) 
     cpl = compute_cpl(classe)
     append!(getfield(instance_classe, :class_precedence_list), cpl)
     return instance
@@ -111,10 +122,6 @@ function Base.getproperty(classe::class, slot::Symbol)
         end
     end
 
-    if slot == :name
-        return getfield(classe, :($slot))
-    end
-
     if slot == :direct_superclasses
         if isdefined(classe, slot)
             classes = []
@@ -133,16 +140,34 @@ function Base.getproperty(classe::class, slot::Symbol)
         for superclass in getfield(classe, :direct_superclasses)
             if superclass != Object
                 if (haskey(getfield(superclass, :direct_slots), slot))
-                    return getfield(superclass, :direct_slots)[slot]
+                    instance = nothing
+                    for (k, v) in instance_registry
+                        if v == superclass
+                            instance = k
+                        end
+                    end
                 end
             end
         end
     end
 
-    if haskey(getfield(classe, :direct_slots), slot)
-        return getfield(classe, :direct_slots)[slot]
+    for super_class in getfield(classe, :direct_superclasses)
+        if haskey(getfield(super_class, :direct_slots), slot)
+            return getfield(super_class, :direct_slots)[slot]
+        end
     end
-    
+
+    if haskey(getfield(classe, :direct_slots), slot)
+        if getfield(classe, :direct_slots)[slot] === nothing
+            return println("missing")
+        else
+            return getfield(classe, :direct_slots)[slot]
+        end
+    end
+
+    if slot == :name
+        return getfield(classe, :($slot))
+    end
 
     error("$(classe.name) does not have slot $slot")
 end
@@ -189,27 +214,7 @@ function class_of(x)
         return _String
     end
 end
-
-#@defmethod print_object(classe::Class, io) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
-
-function print_object(method::multiMethod, io::IO)
-    specializers = [class_name(spec) for spec in method_specializers(method)]
-    spec_tuple = tuple(specializers...)
-    if method.generic_function !== nothing
-        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
-    else
-        return print(io,"<MultiMethod>")
-    end
-end
-
-function print_object(generic::genericFunction, io::IO)
-    if generic_methods(generic) !== nothing
-        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
-    else
-        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
-    end
-end
-
+ 
 function macroproccess_class(expr::Expr)
     readers = Dict()
     writers = Dict()
@@ -245,6 +250,37 @@ function macroproccess_class(expr::Expr)
     return readers, writers
 end
 
+@defmethod print_object(classe::Class, io) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>") 
+
+Base.show(io::IO, classe::class) = print_object(classe, io)
+
+@defmethod print_object(generic::GenericFunction, io) = 
+begin 
+    if generic_methods(generic) !== nothing 
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>") 
+    else 
+        return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>") 
+    end 
+end 
+
+Base.show(io::IO, generic::genericFunction) = print_object(generic, io)
+
+@defmethod print_object(method::MultiMethod, io) = 
+begin 
+    specializers = [if spec isa class class_name(spec) elseif spec isa genericFunction generic_name(spec) end for spec in method_specializers(method)] 
+    spec_tuple = tuple(specializers...) 
+    if method.generic_function !== nothing 
+        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") 
+    else 
+        return print(io,"<MultiMethod>") 
+    end 
+end 
+
+Base.show(io::IO, method::multiMethod) = print_object(method, io)
+
+@defmethod print_object(obj::Object, io) = print(io,"<$(class_name(class_of(obj))) $(string(objectid(obj), base=62))>") 
+
+Base.show(io::IO, instance::instanceWrap) = print_object(instance, io)
 # ------ Generic function call ------
 
 (x::genericFunction)(args...) = generic_call(x, args)
@@ -256,7 +292,7 @@ function generic_call(generic::genericFunction, args)
     selected_methods = select_applicable_methods(generic, args)
 
     if !no_applicable_method(generic, selected_methods, args)
-        return selected_methods[1].procedure(args..., call_next_method(selected_methods[2:end], args), args)
+        return selected_methods[1].procedure(args..., selected_methods[2:end], args) 
     else
         return
     end
@@ -318,15 +354,21 @@ function get_applicable_methods(methods, argtypes)
     return applicable_methods
 end
 
-function is_same_type(method, argtypes)
-    method = method
-    for i in 1:length(method)
-        if !(method[i] in getfield(argtypes[i], :class_precedence_list))
-            return false
-        end
-    end
-    return true
-end
+function is_same_type(method, argtypes) 
+    method = method 
+    for i in 1:length(method) 
+        if argtypes[i] isa genericFunction || argtypes[i] isa multiMethod 
+            if method[i] != argtypes[i] 
+                return false 
+            end 
+        elseif !(argtypes[i] == Top) 
+            if !(method[i] in getfield(argtypes[i], :class_precedence_list)) 
+                return false 
+            end 
+        end 
+    end 
+    return true 
+end 
 
 function get_types_in_symbol(args)
     return arg_types = map(arg -> ( if arg isa Int64 
@@ -341,8 +383,10 @@ function get_types_in_symbol(args)
                                         return GenericFunction
                                     elseif arg isa multiMethod
                                         return MultiMethod
+                                    elseif arg isa instanceWrap 
+                                        return instance_registry[arg] 
                                     else 
-                                        return instance_registry[arg]
+                                        return Top
                                     end), args)
 end
 
@@ -354,3 +398,4 @@ function no_applicable_method(generic, selected_methods, args)
         return true
     end
 end
+
