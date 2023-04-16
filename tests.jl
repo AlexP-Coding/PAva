@@ -2,8 +2,19 @@ include("classesMacros.jl")
 
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
+@defmethod testing1(a::_Int64, b::_Int64) = a+b
+@defmethod testing1(a::_Int64, b::_String) = println(a, " mais ", b)
+@defmethod testing1(a::Top, b::_String) = println(a, " + ", b)
+
+testing1(1,2)
+testing1("2",1)
+testing1(1,"2")
+
+generic_registry[:testing1].methods
+
 get_foo(new(Foo))
 set_foo!(new(Foo), 4)
+get_foo(new(Foo))
 
 @defclass(CountingClass, [Class], [counter=0])
 

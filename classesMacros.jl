@@ -88,7 +88,7 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
     for (p, s) in zip(parameters, specializers)
         specializers_dict[p] = s
     end
-
+    
     new_method = multiMethod(specializers_dict, procedure, generic_function)
 
     #method should have the same parameters as corresponding generic function
@@ -98,10 +98,31 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
         error("method does not have same parameters as $(generic.name)")
     end
 
-    # add method to generic function
-    # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
-    push!(getfield(generic, :methods), new_method)
 
+
+    new_specializers = Vector{class}()
+    for specializer in specializers
+        push!(new_specializers, specializer)
+    end
+
+    # println("new_specializers: ", new_specializers)
+    count = 0
+    for j in 1:length(getfield(generic, :methods))
+        for i in 1:length(new_specializers)
+            if new_specializers[i].name == getfield(generic, :methods)[j].specializers[i].name
+                count = count+1
+            end
+        end
+        if count == length(new_specializers)
+            println("method already exists")
+            getfield(generic, :methods)[j] = new_method
+            return new_method
+        end
+        count = 0
+    end
+    # if whole 'for' is done and it didn't return, then it's because method didn't exist yet
+    println("method didnt exist yet")
+    push!(getfield(generic, :methods), new_method)
     return new_method
 end
 
@@ -120,11 +141,13 @@ macro defmethod(expr...)
             push!(args_specializers, class_registry[arg.args[2]])
         end
     end
-    for arg_spec in args_specializers
-        if arg_spec == Top
-            reverse!(args_specializers)
-        end
-    end
+    println("args_specializers: ", args_specializers)
+    reverse!(args_specializers)
+    # for arg_spec in args_specializers
+    #     if arg_spec == Top
+    #         reverse!(args_specializers)
+    #     end
+    # end
 
     body = expr[1].args[2]
     name = [expr[1].args[1].args[1]]
