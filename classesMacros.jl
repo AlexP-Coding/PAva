@@ -193,19 +193,6 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
                     #slots_dict[slot_name] = slot_options[:initform]
                     slots_dict[slot_name] = transformed_option.second
                 #if haskey(slot_options, :reader)
-
-                # isso acho que passa para a macro
-                elseif :reader in transformed_option
-                    println("Stored a reader method")
-                    #=@defgeneric get_name(o)
-                    @defgeneric get_age(o)
-                    @defgeneric get_friend(o)=#
-
-                elseif :writer in transformed_option
-                    println("Stored a writer method")
-                    #=@defgeneric set_name!(o)
-                    @defgeneric set_age!(o)
-                    @defgeneric set_friend!(o)=#
                 end
             end
 
@@ -410,10 +397,6 @@ function Base.getproperty(classe::class, slot::Symbol)
     end
     #println("entreiii")
 
-    if slot == :name
-        return getfield(classe, :($slot))
-    end
-
     #println("entreiiii")
 
     if slot == :direct_superclasses
@@ -464,7 +447,15 @@ function Base.getproperty(classe::class, slot::Symbol)
 
     if haskey(getfield(classe, :direct_slots), slot)
         #println("entrei3")
-        return getfield(classe, :direct_slots)[slot]
+        if getfield(classe, :direct_slots)[slot] === nothing
+            return println("missing")
+        else
+            return getfield(classe, :direct_slots)[slot]
+        end
+    end
+
+    if slot == :name
+        return getfield(classe, :($slot))
     end
 
     error("$(classe.name) does not have slot $slot")
@@ -564,11 +555,35 @@ end
 
 macro defclass(expr...)
     readers, writers = macroproccess_class(expr[3])
-    #println(readers, " and ", writers)
 
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
+
+        esc(
+            for (slot, method) in $readers
+                call_defmethod_reader(slot, method, $expr[1])
+            end
+        )
+
+        esc(
+            for (slot, method) in $writers
+                call_defmethod_writer(slot, method, $expr[1])
+            end
+        )
+        $(esc(expr[1]))
     end
+end
+
+function call_defmethod_reader(slot, method, classname)
+    eval(quote
+        @defmethod $method(o::$classname) = o.$slot
+    end)
+end
+
+function call_defmethod_writer(slot, method, classname)
+    eval(quote
+        @defmethod $method(o::$classname, v) = o.$slot = v
+    end)
 end
 
 function macroproccess_class(expr::Expr)

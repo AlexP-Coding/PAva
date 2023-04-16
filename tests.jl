@@ -2,11 +2,16 @@ include("classesMacros.jl")
 
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
+get_foo(new(Foo))
+set_foo!(new(Foo), 4)
+
 @defclass(CountingClass, [Class], [counter=0])
 
 @defclass(Foo, [], [], metaclass=CountingClass)
 
 @defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
+
+get_color(new(ColorMixin))
 
 @defclass(ComplexNumber, [], [real, imag])
 
@@ -69,20 +74,15 @@ Person
 class_of(Person)
 class_of(class_of(Person))
 
-#get_name(new(Person))
-#set_name!(new(Person), 4)
+get_age(new(Person))
+get_name(new(Person))
 
 add(123, 456)
 
 @defclass(Circle, [], [center, radius])
-c3 = new(Circle, center=0; radius=1)
-c3.center
-c3.radius
 @defclass(ColorMixin, [], [color])
 @defclass(ColoredCircle, [ColorMixin, Circle], [])
 cc = new(ColoredCircle)
-cc.center
-cc.radius
 
 # class hierarchy
 ColoredCircle.direct_superclasses
