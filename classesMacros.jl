@@ -120,6 +120,12 @@ macro defmethod(expr...)
             push!(args_specializers, class_registry[arg.args[2]])
         end
     end
+    for arg_spec in args_specializers
+        if arg_spec == Top
+            reverse!(args_specializers)
+        end
+    end
+
     body = expr[1].args[2]
     name = [expr[1].args[1].args[1]]
 
@@ -285,20 +291,34 @@ Base.copy(m::class) = class(getfield(m, :name), copy(getfield(m, :direct_supercl
         return cpl
     end
 
-function initialize(instance::instanceWrap; kwargs...)
-    classe = instance_registry_2[instance]
+@defmethod initialize(classe::Class, initargs) =
+begin
     for super_class in getfield(classe, :direct_superclasses)
         for super_slot in getfield(super_class, :direct_slots)
-            if haskey(kwargs, super_slot.first)
-                getfield(super_class, :direct_slots)[super_slot.first] = kwargs[super_slot.first]
+            for arg in initargs
+                #println("super: ", super_slot.first)
+                if arg.first == super_slot.first
+                    #println("entrei")
+                    getfield(super_class, :direct_slots)[super_slot.first] = arg.second
+                    #println(getfield(super_class, :direct_slots))
+                end
             end
         end
     end
     for (slot, value) in getfield(classe, :direct_slots)
-        if haskey(kwargs, slot)
-            getfield(classe, :direct_slots)[slot] = kwargs[slot]
-            if haskey(getfield(instance, :classtoinstance), slot)
-                getfield(instance, :classtoinstance)[slot] = kwargs[slot]
+        for arg in initargs
+            if arg.first == slot
+                getfield(classe, :direct_slots)[slot] = arg.second
+                instance = nothing
+                for (k, v) in instance_registry_2
+                    if v == classe
+                        instance = k
+                    end
+                end 
+                if haskey(getfield(instance, :classtoinstance), slot)
+                    #println(getfield(instance, :classtoinstance))
+                    getfield(instance, :classtoinstance)[slot] = arg.second
+                end
             end
         end
     end
@@ -307,7 +327,10 @@ end
 function new(classe::class; kwargs...)
     instance = allocate_instance(classe)
     instance_classe = instance_registry_2[instance]
-    initialize(instance; kwargs...)
+    initargs = [kwargs...]
+    #println(initargs)
+    #println(instance_classe)
+    initialize(instance_classe, initargs)
     cpl = compute_cpl(classe)
     append!(getfield(instance_classe, :class_precedence_list), cpl)
     
@@ -367,6 +390,7 @@ function Base.getproperty(instance::instanceWrap, slot::Symbol)
 end
 
 function Base.getproperty(classe::class, slot::Symbol)
+    #println("entrei")
     if slot == :slots
         if(classe == Class)
             return println(collect(fieldnames(class)))
@@ -375,6 +399,8 @@ function Base.getproperty(classe::class, slot::Symbol)
         end
     end
 
+    #println("entreii")
+
     if slot == :direct_slots
         if isempty(keys(getfield(classe, :($slot))))
             return println([])
@@ -382,10 +408,13 @@ function Base.getproperty(classe::class, slot::Symbol)
             return println(keys(getfield(classe, :($slot))))
         end
     end
+    #println("entreiii")
 
     if slot == :name
         return getfield(classe, :($slot))
     end
+
+    #println("entreiiii")
 
     if slot == :direct_superclasses
         if isdefined(classe, slot)
@@ -397,24 +426,46 @@ function Base.getproperty(classe::class, slot::Symbol)
         end
     end
 
+    #println("entreiiiii")
+
     if slot == :class_precedence_list
         return compute_cpl(classe)
     end
 
+    #println("entreiiiiii")
+
     if (!isempty(getfield(classe, :direct_superclasses)))
+        #println("entreiiiiiii")
         for superclass in getfield(classe, :direct_superclasses)
             if superclass != Object
                 if (haskey(getfield(superclass, :direct_slots), slot))
-                    return getfield(superclass, :direct_slots)[slot]
+                    instance = nothing
+                    for (k, v) in instance_registry_2
+                        if v == superclass
+                            instance = k
+                        end
+                    end
+                    #println(superclass)
+                    #println(instance)
+                    #return getfield(instance, :classtoinstance)[slot]
                 end
             end
         end
     end
 
+    #println("entrei1")
+
+    for super_class in getfield(classe, :direct_superclasses)
+        #println("entrei2")
+        if haskey(getfield(super_class, :direct_slots), slot)
+            return getfield(super_class, :direct_slots)[slot]
+        end
+    end
+
     if haskey(getfield(classe, :direct_slots), slot)
+        #println("entrei3")
         return getfield(classe, :direct_slots)[slot]
     end
-    
 
     error("$(classe.name) does not have slot $slot")
 end
@@ -513,7 +564,7 @@ end
 
 macro defclass(expr...)
     readers, writers = macroproccess_class(expr[3])
-    println(readers, " and ", writers)
+    #println(readers, " and ", writers)
 
     quote
         global $(esc(expr[1])) = defclass($expr[1], $(expr[2].args), $(expr[3:end]))
@@ -631,8 +682,10 @@ end
 function is_same_type(method, argtypes)
     method = method
     for i in 1:length(method)
-        if !(method[i] in getfield(argtypes[i], :class_precedence_list))
-            return false
+        if !(argtypes[i] == Top)
+            if !(method[i] in getfield(argtypes[i], :class_precedence_list))
+                return false
+            end
         end
     end
     return true
@@ -651,8 +704,10 @@ function get_types_in_symbol(args)
                                         return GenericFunction
                                     elseif arg isa multiMethod
                                         return MultiMethod
-                                    else 
+                                    elseif arg isa instanceWrap
                                         return instance_registry_2[arg]
+                                    else 
+                                        return Top
                                     end), args)
     #println("arg types function: ", arg_types)
 end

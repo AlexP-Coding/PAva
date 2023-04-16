@@ -69,14 +69,20 @@ Person
 class_of(Person)
 class_of(class_of(Person))
 
-@defmethod get_name(o::Person) = o.name
-@defmethod set_name!(o::Person, v) = o.name = v
+#get_name(new(Person))
+#set_name!(new(Person), 4)
 
 add(123, 456)
 
 @defclass(Circle, [], [center, radius])
+c3 = new(Circle, center=0; radius=1)
+c3.center
+c3.radius
 @defclass(ColorMixin, [], [color])
 @defclass(ColoredCircle, [ColorMixin, Circle], [])
+cc = new(ColoredCircle)
+cc.center
+cc.radius
 
 # class hierarchy
 ColoredCircle.direct_superclasses
