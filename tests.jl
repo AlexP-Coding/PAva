@@ -11,6 +11,8 @@ set_foo!(new(Foo), 4)
 
 @defclass(Foo, [], [], metaclass=CountingClass)
 
+class_slots(CountingClass)
+
 @defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
 get_color(new(ColorMixin))
