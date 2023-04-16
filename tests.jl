@@ -1,5 +1,7 @@
 include("classesMacros.jl")
 
+print_object.methods
+
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
 get_foo(new(Foo))

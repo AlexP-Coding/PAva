@@ -15,6 +15,9 @@ instance_registry_2 = Dict{instanceWrap, class}()
 # global dictionary to keep track of generic functions
 generic_registry = Dict{Symbol, genericFunction}()
 
+# global dictionary to keep track of methods
+method_registry = Dict{Symbol, multiMethod}()
+
 # ------ Creation of Top, Object and BuiltInClass classes ------
 
 global Top = class(:Top, [], Dict())
@@ -53,14 +56,14 @@ append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
 
 # ----------------------------- Generic functions ---------------------------------
 
+global GenericFunction = genericFunction(:GenericFunction, [], [])
+generic_registry[:GenericFunction] = GenericFunction
+
 function defgeneric(name::Symbol, parameters)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
 end
-
-global GenericFunction = genericFunction(:GenericFunction, [], [])
-generic_registry[:GenericFunction] = GenericFunction
 
 # macro definition for @defgeneric
 macro defgeneric(expr...)
@@ -80,10 +83,11 @@ generic_methods(generic::genericFunction) = generic.methods
 # ----------------------------- Multi method ---------------------------------
 
 global MultiMethod = multiMethod(Dict(), () -> (), :GenericFunction)
+method_registry[:MultiMethod] = MultiMethod
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
-    specializers_dict = Dict{Symbol, class}()
+    specializers_dict = Dict{Symbol, Any}()
 
     for (p, s) in zip(parameters, specializers)
         specializers_dict[p] = s
@@ -117,7 +121,13 @@ macro defmethod(expr...)
             push!(args_specializers, Top)
         else
             push!(args, arg.args[1])
-            push!(args_specializers, class_registry[arg.args[2]])
+            if arg.args[2] == :GenericFunction
+                push!(args_specializers, generic_registry[arg.args[2]])
+            elseif arg.args[2] == :MultiMethod
+                push!(args_specializers, method_registry[arg.args[2]])
+            else
+                push!(args_specializers, class_registry[arg.args[2]])
+            end
         end
     end
     for arg_spec in args_specializers
@@ -519,37 +529,40 @@ class_direct_superclasses(classe::class) = classe.direct_superclasses
 
 # ------ Function definitions for printing objects ------
 
-#@defmethod print_object(classe::Class, io) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
+@defmethod print_object(classe::Class, io) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 
 Base.show(io::IO, classe::class) = print_object(classe, io)
-    
-print_object(classe::class, io::IO) = print(io, "<$(class_name(class_of(classe))) $(class_name(classe))>")
 
-Base.show(io::IO, instance::instanceWrap) = print_object(instance, io)
-
-print_object(instance::instanceWrap, io::IO) = print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
-
-Base.show(io::IO, method::multiMethod) = print_object(method, io)
-
-function print_object(method::multiMethod, io::IO)
-    specializers = [class_name(spec) for spec in method_specializers(method)]
-    spec_tuple = tuple(specializers...)
-    if method.generic_function !== nothing
-        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
-    else
-        return print(io,"<MultiMethod>")
-    end
-end
-
-Base.show(io::IO, generic::genericFunction) = print_object(generic, io)
-
-function print_object(generic::genericFunction, io::IO)
+@defmethod print_object(generic::GenericFunction, io) =
+begin
     if generic_methods(generic) !== nothing
         return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with $(length(generic_methods(generic))) methods>")
     else
         return print(io,"<$(generic_name(class_of(generic))) $(generic_name(generic)) with 0 methods>")
     end
 end
+
+Base.show(io::IO, generic::genericFunction) = print_object(generic, io)
+
+@defmethod print_object(method::MultiMethod, io) =
+begin
+    specializers = [if spec isa class class_name(spec) elseif spec isa genericFunction generic_name(spec) end for spec in method_specializers(method)]
+    spec_tuple = tuple(specializers...)
+    if method.generic_function !== nothing
+        return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>")
+    else
+        return print(io,"<MultiMethod>")
+    end
+end
+
+Base.show(io::IO, method::multiMethod) = print_object(method, io)
+    
+#=
+
+Base.show(io::IO, instance::instanceWrap) = print_object(instance, io)
+
+print_object(instance::instanceWrap, io::IO) = print(io,"<$(class_name(class_of(instance))) $(string(objectid(instance), base=62))>")
+=#
 
 # ------ Macro definition for defclass ------
 
@@ -697,7 +710,11 @@ end
 function is_same_type(method, argtypes)
     method = method
     for i in 1:length(method)
-        if !(argtypes[i] == Top)
+        if argtypes[i] isa genericFunction || argtypes[i] isa multiMethod
+            if method[i] != argtypes[i]
+                return false
+            end
+        elseif !(argtypes[i] == Top)
             if !(method[i] in getfield(argtypes[i], :class_precedence_list))
                 return false
             end
