@@ -1,17 +1,9 @@
 include("main.jl")
 
-print_object.methods
-
 @defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
 
 get_foo(new(Foo))
 set_foo!(new(Foo), 4)
-
-@defclass(CountingClass, [Class], [counter=0])
-
-@defclass(Foo, [], [], metaclass=CountingClass)
-
-class_slots(CountingClass)
 
 @defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
@@ -207,3 +199,23 @@ let shapes = [new(Line), new(ColoredCircle, color=:red), new(ColoredLine, color=
         draw(shape, printer)
     end
 end
+
+@defclass(CountingClass, [Class],
+[counter=0])
+
+@defmethod allocate_instance(class::CountingClass) = begin
+    println("entrei aqui")
+    class.counter += 1
+    call_next_method()
+    end
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(Bar, [], [], metaclass=CountingClass)
+
+new(Foo)
+new(Foo)
+new(Bar)
+
+Foo.counter
+Bar.counter

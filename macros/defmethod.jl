@@ -57,8 +57,6 @@ function defmethod(generic_function::Symbol, parameters, specializers, procedure
         error("method does not have same parameters as $(generic.name)")
     end
 
-    # add method to generic function
-    # TODO: ver se já existe na generic function aquele metodo, para nao ter repetidos
     push!(getfield(generic, :methods), new_method)
 
     return new_method

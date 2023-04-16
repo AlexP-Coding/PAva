@@ -91,8 +91,13 @@ function defclass(name::Symbol, direct_superclasses, direct_slots; kwargs...)
     end
 
     if length(direct_slots) == 2
-        class_objet = class_registry[metaclass.args[2]]
-        new_classe = class(name, new_superclasses, slots_dict, [], class_objet)
+        class_object = class_registry[metaclass.args[2]]
+        for (meta_slot, value) in getfield(class_object, :direct_slots)
+            if !(haskey(slots_dict, meta_slot))
+                slots_dict[meta_slot] = value
+            end
+        end
+        new_classe = class(name, new_superclasses, slots_dict, [], class_object)
     else
         new_classe = class(name, new_superclasses, slots_dict, [])
     end

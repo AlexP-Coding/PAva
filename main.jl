@@ -161,21 +161,6 @@ function Base.getproperty(classe::class, slot::Symbol)
         return compute_cpl(classe)
     end
 
-    if (!isempty(getfield(classe, :direct_superclasses)))
-        for superclass in getfield(classe, :direct_superclasses)
-            if superclass != Object
-                if (haskey(getfield(superclass, :direct_slots), slot))
-                    instance = nothing
-                    for (k, v) in instance_registry
-                        if v == superclass
-                            instance = k
-                        end
-                    end
-                end
-            end
-        end
-    end
-
     for super_class in getfield(classe, :direct_superclasses)
         if haskey(getfield(super_class, :direct_slots), slot)
             return getfield(super_class, :direct_slots)[slot]
@@ -388,7 +373,7 @@ function is_same_type(method, argtypes)
             if method[i] != argtypes[i] 
                 return false 
             end 
-        elseif !(argtypes[i] == Top) 
+        elseif !(argtypes[i] == Top)
             if !(method[i] in getfield(argtypes[i], :class_precedence_list)) 
                 return false 
             end 
@@ -405,7 +390,7 @@ function get_types_in_symbol(args)
                                     elseif arg isa String
                                         return _String
                                     elseif arg isa class
-                                        return Class
+                                            return Class
                                     elseif arg isa genericFunction
                                         return GenericFunction
                                     elseif arg isa multiMethod
