@@ -6,7 +6,7 @@
 
 include("structures/struct_collection.jl")
 
-# global dictionary to keep track of clases
+# global dictionary to keep track of classes
 class_registry = Dict{Symbol, class}()
 
 # global dictionary to keep track of classes of instances
@@ -27,7 +27,7 @@ global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
 append!(getfield(BuiltInClass, :class_precedence_list), [BuiltInClass, Top])
 
-# ------ Creation of Class class ------
+# ------ Creation of class Class ------
 
 global Class = class(:Class, [], Dict())
 class_registry[:Class] = Class
@@ -54,11 +54,22 @@ append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
 # ----------------------------- Generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
-    println("I entered a generic function.", name)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
 end
+
+global GenericFunction = genericFunction(:GenericFunction, [], [])
+generic_registry[:GenericFunction] = GenericFunction
+
+# macro definition for @defgeneric
+macro defgeneric(expr...)
+    quote
+        $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
+    end
+end
+
+# ------ Introspetion of generic functions ------
 
 generic_name(generic::genericFunction) = getfield(generic, :name)
 
@@ -66,26 +77,9 @@ generic_parameters(generic::genericFunction) = generic.parameters
    
 generic_methods(generic::genericFunction) = generic.methods
 
-global GenericFunction = genericFunction(:GenericFunction, [], [])
-
-# macro definition for @defgeneric
-macro defgeneric(expr...)
-    dump(expr)
-    quote
-        $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
-    end
-end
-
-#@defgeneric print_object(obj, io)
-
 # ----------------------------- Multi method ---------------------------------
 
-method_generic_function(method::multiMethod) = method.generic_function
-   
-method_specializers(method::multiMethod) = method.specializers
-   
-
-global MultiMethod = multiMethod(Dict(), () -> (), nothing)
+global MultiMethod = multiMethod(Dict(), () -> (), :GenericFunction)
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
@@ -113,35 +107,38 @@ end
 
 # macro definition for @defmethod
 macro defmethod(expr...)
-    fun_args = []
-    fun_args_specializers = []
     args_types = expr[1].args[1].args[2:end]
+    args_specializers = []
     args = []
     
     for arg in args_types
         if isa(arg, Symbol)
-            push!(fun_args, arg)
             push!(args, arg)
-            push!(fun_args_specializers, Top)
+            push!(args_specializers, Top)
         else
-            push!(fun_args, arg.args[1])
             push!(args, arg.args[1])
-            push!(fun_args_specializers, class_registry[arg.args[2]])
+            push!(args_specializers, class_registry[arg.args[2]])
         end
     end
     body = expr[1].args[2]
     name = [expr[1].args[1].args[1]]
 
-    generic_args = vcat(name, fun_args)
+    generic_args = vcat(name, args)
     ex = Expr(:call, generic_args...)
     
     quote
         if !(haskey(generic_registry, $expr[1].args[1].args[1]))
             @defgeneric $(ex)
         end
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
+        defmethod($expr[1].args[1].args[1], $args, $args_specializers, ($(args...), next_methods, args) -> $body)
     end
 end
+
+# ------ Introspetion of methods ------
+
+method_generic_function(method::multiMethod) = method.generic_function
+   
+method_specializers(method::multiMethod) = reverse!(method.specializers)
 
 # ------ Function definitions ------
 
@@ -464,7 +461,8 @@ function class_of(x)
         return _String
     end
 end
-    
+
+# ------ Introspetion of classes ------
 
 class_name(classe::class) = getfield(classe, :name)
 
@@ -493,8 +491,7 @@ Base.show(io::IO, method::multiMethod) = print_object(method, io)
 
 function print_object(method::multiMethod, io::IO)
     specializers = [class_name(spec) for spec in method_specializers(method)]
-    specializers_rev = reverse!(specializers)
-    spec_tuple = tuple(specializers_rev...)
+    spec_tuple = tuple(specializers...)
     if method.generic_function !== nothing
         return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
     else
@@ -558,14 +555,6 @@ function macroproccess_class(expr::Expr)
     return readers, writers
 end
 
-@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
-
-@defclass(CountingClass, [Class], [counter=0])
-
-@defclass(Foo, [], [], metaclass=CountingClass)
-
-@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
-
 # ------ Generic function call ------
 
 (x::genericFunction)(args...) = generic_call(x, args)
@@ -613,8 +602,8 @@ function compare_cpl(type1, type2, cpl)
 end
 
 function comparemethods(m1, m2, argtypes)
-    args1 = reverse!(method_specializers(m1))
-    args2 = reverse!(method_specializers(m2))
+    args1 = method_specializers(m1)
+    args2 = method_specializers(m2)
     cpl_list = [getfield(arg, :class_precedence_list) for arg in argtypes]
 
     for (i, (arg1, arg2)) in enumerate(zip(args1, args2))
@@ -640,7 +629,7 @@ function get_applicable_methods(methods, argtypes)
 end
 
 function is_same_type(method, argtypes)
-    method = reverse!(method)
+    method = method
     for i in 1:length(method)
         if !(method[i] in getfield(argtypes[i], :class_precedence_list))
             return false

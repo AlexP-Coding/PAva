@@ -1,5 +1,13 @@
 include("classesMacros.jl")
 
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
+
 @defclass(ComplexNumber, [], [real, imag])
 
 c1 = new(ComplexNumber, real=1, imag=2)
@@ -100,8 +108,6 @@ class_direct_slots(ColoredCircle)
 class_slots(ColoredCircle)
 class_direct_superclasses(ColoredCircle)
 class_cpl(ColoredCircle)
-#generic_methods(draw)
-#method_specializers(generic_methods(draw)[1])
 
 @defclass(Foo, [], [a=1, b=2])
 @defclass(Bar, [], [b=3, c=4])
@@ -140,6 +146,10 @@ compute_cpl(F)
 @defmethod draw(shape::Circle, device::Screen) = println("Drawing a Circle on Screen")
 @defmethod draw(shape::Line, device::Printer) = println("Drawing a Line on Printer")
 @defmethod draw(shape::Circle, device::Printer) = println("Drawing a Circle on Printer")
+
+generic_methods(draw)
+
+method_specializers(generic_methods(draw)[1])
 
 # to test the order of methods
 @defmethod draw(shape::Line, device::Screen) = println("Drawing a Line on Screen")

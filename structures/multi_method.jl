@@ -1,5 +1,5 @@
 struct multiMethod
     specializers::Dict{Symbol, class}
     procedure::Function
-    generic_function::Union{Symbol, Nothing}
+    generic_function::Symbol
 end
