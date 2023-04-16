@@ -19,9 +19,9 @@ struct class
 end
 
 struct multiMethod
-    specializers::Dict{Symbol, class}
+    specializers::Dict{Symbol, Any}
     procedure::Function
-    generic_function::Union{Symbol, Nothing}
+    generic_function::Symbol
 end
 
 struct genericFunction
@@ -40,7 +40,7 @@ end
 
 # ------ Global dictionaries to keep track of classes, instances and generic functions ------
 
-# global dictionary to keep track of clases
+# global dictionary to keep track of classes
 class_registry = Dict{Symbol, class}()
 
 # global dictionary to keep track of classes of instances
@@ -48,6 +48,9 @@ instance_registry_2 = Dict{instanceWrap, class}()
 
 # global dictionary to keep track of generic functions
 generic_registry = Dict{Symbol, genericFunction}()
+
+# global dictionary to keep track of methods
+method_registry = Dict{Symbol, multiMethod}()
 
 # ------ Creation of Top, Object and BuiltInClass classes ------
 
@@ -61,7 +64,7 @@ global BuiltInClass = class(:BuiltInClass, [Top], Dict())
 class_registry[:BuiltInClass] = BuiltInClass
 append!(getfield(BuiltInClass, :class_precedence_list), [BuiltInClass, Top])
 
-# ------ Creation of Class class ------
+# ------ Creation of class Class ------
 
 global Class = class(:Class, [], Dict())
 class_registry[:Class] = Class
@@ -88,29 +91,16 @@ append!(getfield(_IO, :class_precedence_list), [BuiltInClass, _IO, Top])
 # ----------------------------- Generic functions ---------------------------------
 
 function defgeneric(name::Symbol, parameters)
-    println("I entered a generic function.", name)
     new_generic = genericFunction(name, parameters, [])
     generic_registry[name] = new_generic
     return new_generic
 end
 
-function generic_name(generic::genericFunction)
-    getfield(generic, :name)
-end
-
-function generic_parameters(generic::genericFunction)
-    generic.parameters
-end
-
-function generic_methods(generic::genericFunction)
-    generic.methods
-end
-
 global GenericFunction = genericFunction(:GenericFunction, [], [])
+generic_registry[:GenericFunction] = GenericFunction
 
 # macro definition for @defgeneric
 macro defgeneric(expr...)
-    dump(expr)
     quote
         $(esc(expr[1].args[1])) = defgeneric($expr[1].args[1], $expr[1].args[2:end])
     end
@@ -120,19 +110,12 @@ end
 
 # ----------------------------- Multi method ---------------------------------
 
-function method_generic_function(method::multiMethod)
-    method.generic_function
-end
-
-function method_specializers(method::multiMethod)
-    method.specializers
-end
-
-global MultiMethod = multiMethod(Dict(), () -> (), nothing)
+global MultiMethod = multiMethod(Dict(), () -> (), :GenericFunction)
+method_registry[:MultiMethod] = MultiMethod
 
 function defmethod(generic_function::Symbol, parameters, specializers, procedure)
     #if the corresponding generic function does not exist, creates
-    specializers_dict = Dict{Symbol, class}()
+    specializers_dict = Dict{Symbol, Any}()
 
     for (p, s) in zip(parameters, specializers)
         specializers_dict[p] = s
@@ -164,36 +147,51 @@ end
 
 # macro definition for @defmethod
 macro defmethod(expr...)
-    println("entrei")
-    dump(expr)
-    fun_args = []
-    fun_args_specializers = []
     args_types = expr[1].args[1].args[2:end]
+    args_specializers = []
     args = []
     for arg in args_types
         if isa(arg, Symbol)
-            push!(fun_args, arg)
             push!(args, arg)
-            push!(fun_args_specializers, Top)
+            push!(args_specializers, Top)
         else
-            push!(fun_args, arg.args[1])
             push!(args, arg.args[1])
-            push!(fun_args_specializers, class_registry[arg.args[2]])
+            if haskey(class_registry, arg.args[2])
+                push!(args_specializers, class_registry[arg.args[2]])
+            elseif haskey(method_registry, arg.args[2])
+                push!(args_specializers, method_registry[arg.args[2]])
+            elseif haskey(generic_registry, arg.args[2])
+                push!(args_specializers, generic_registry[arg.args[2]])
+            end
         end
     end
     body = expr[1].args[2]
-    name = [expr[1].args[1].args[1]]
+    generic_name = [expr[1].args[1].args[1]]
 
-    generic_args = vcat(name, fun_args)
+    generic_args = vcat(generic_name, args)
     ex = Expr(:call, generic_args...)
     
     quote
         if !(haskey(generic_registry, $expr[1].args[1].args[1]))
             @defgeneric $(ex)
         end
-        defmethod($expr[1].args[1].args[1], $fun_args, $fun_args_specializers, ($(args...), next_methods, args) -> $body)
+        defmethod($expr[1].args[1].args[1], $args, $args_specializers, ($(args...), next_methods, args) -> $body)
     end
 end
+
+# ------ Introspection of methods ------
+
+@defmethod method_generic_function(method::MultiMethod) = method.generic_function
+
+@defmethod method_specializers(method::MultiMethod) = reverse!(method.specializers)
+
+# ------ Introspection of generic functions ------
+
+@defmethod generic_name(generic::GenericFunction) = getfield(generic, :name)
+
+@defmethod generic_parameters(generic::GenericFunction) = generic.parameters
+
+@defmethod generic_methods(generic::GenericFunction) = generic.methods
 
 # ------ Function definitions ------
 
@@ -561,27 +559,18 @@ function class_of(x)
         return _String
     end
 end
+
+# ------ Introspection of classes ------
     
+@defmethod class_name(classe::Class) = getfield(classe, :name)
 
-function class_name(classe::class) 
-    getfield(classe, :name)
-end
+@defmethod class_slots(classe::Class) = classe.slots
 
-function class_slots(classe::class) 
-    classe.slots
-end
+@defmethod class_direct_slots(classe::Class) = classe.direct_slots
 
-function class_direct_slots(classe::class) 
-    classe.direct_slots
-end
+@defmethod class_cpl(classe::Class) = classe.class_precedence_list
 
-function class_cpl(classe::class) 
-    classe.class_precedence_list
-end
-
-function class_direct_superclasses(classe::class) 
-    classe.direct_superclasses
-end
+@defmethod class_direct_superclasses(classe::Class) = classe.direct_superclasses
 
 # ------ Function definitions for printing objects ------
 
@@ -611,8 +600,7 @@ end
 
 function print_object(method::multiMethod, io::IO)
     specializers = [class_name(spec) for spec in method_specializers(method)]
-    specializers_rev = reverse!(specializers)
-    spec_tuple = tuple(specializers_rev...)
+    spec_tuple = tuple(specializers...)
     if method.generic_function !== nothing
         return print(io,"<MultiMethod $(generic_name(method_generic_function(method)))$(spec_tuple)>") # its printing :bla, FIX
     else
@@ -713,21 +701,13 @@ function macroproccess_class(expr::Expr)
     return readers, writers
 end
 
-@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
-
-@defclass(CountingClass, [Class], [counter=0])
-
-@defclass(Foo, [], [], metaclass=CountingClass)
-
-@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
-
 # ------ Generic function call ------
 
 (x::genericFunction)(args...) = generic_call(x, args)
 (x::multiMethod)(args...) = x.procedure(args...)
 
 function generic_call(generic::genericFunction, args)
-    println("entrei")
+    #println("entrei")
     @assert length(args) == length(getfield(generic, :parameters))
 
     selected_methods = select_applicable_methods(generic, args)
@@ -750,7 +730,7 @@ end
 
 function select_applicable_methods(generic, args)
     #applicable_methods = []
-    methods = generic_methods(generic)
+    methods = generic.methods
 
     #println("methods: ", generic.methods)
 
@@ -760,10 +740,10 @@ function select_applicable_methods(generic, args)
     #println("generic methods: ", generic.methods)
     applicable_methods = get_applicable_methods(generic.methods, argtypes)
     
-    println("not sorted: ", applicable_methods)
+    #println("not sorted: ", applicable_methods)
     sorted_methods = applicable_methods
     sort_methods(sorted_methods, argtypes)
-    println("sorted: ", sorted_methods)
+    #println("sorted: ", sorted_methods)
 
     return sorted_methods
 end
@@ -786,9 +766,9 @@ function compare_cpl(type1, type2, cpl)
 end
 
 function comparemethods(m1, m2, argtypes)
-    args1 = reverse!(method_specializers(m1))
+    args1 = reverse!(m1.specializers)
     #println("args1: ", args1)
-    args2 = reverse!(method_specializers(m2))
+    args2 = reverse!(m2.specializers)
     #println("args2: ", args2)
 
     cpl_list = [getfield(arg, :class_precedence_list) for arg in argtypes]
@@ -815,7 +795,7 @@ function get_applicable_methods(methods, argtypes)
     applicable_methods = []
     #println("methods: ", methods)
     for method in methods
-        if is_same_type(method_specializers(method), argtypes)
+        if is_same_type(method.specializers, argtypes)
             push!(applicable_methods, method)
         end
     end
@@ -829,7 +809,15 @@ function is_same_type(method, argtypes)
         #println("method: ", method[i])
         #println("arg: ", argtypes[i])
         #println("cpl: ", getfield(argtypes[i], :class_precedence_list))
-        if !(method[i] in getfield(argtypes[i], :class_precedence_list))
+        if argtypes[i] == GenericFunction
+            if method[i] != argtypes[i]
+                return false
+            end
+        elseif argtypes[i] == MultiMethod
+            if method[i] != argtypes[i]
+                return false
+            end
+        elseif !(method[i] in getfield(argtypes[i], :class_precedence_list))
             #println("entrei no false")
             return false
         end
@@ -867,6 +855,14 @@ function no_applicable_method(generic, selected_methods, args)
 end
 
 # --------------------- To test -----------------------------------------------------------
+
+@defclass(Foo, [], [[foo=123, reader=get_foo, writer=set_foo!]])
+
+@defclass(CountingClass, [Class], [counter=0])
+
+@defclass(Foo, [], [], metaclass=CountingClass)
+
+@defclass(ColorMixin, [], [[color, reader=get_color, writer=set_color!, initform="rosa"]])
 
 @defclass(ComplexNumber, [], [real, imag])
 
@@ -968,8 +964,6 @@ class_direct_slots(ColoredCircle)
 class_slots(ColoredCircle)
 class_direct_superclasses(ColoredCircle)
 class_cpl(ColoredCircle)
-#generic_methods(draw)
-#method_specializers(generic_methods(draw)[1])
 
 @defclass(Foo, [], [a=1, b=2])
 @defclass(Bar, [], [b=3, c=4])
@@ -1008,6 +1002,10 @@ compute_cpl(F)
 @defmethod draw(shape::Circle, device::Screen) = println("Drawing a Circle on Screen")
 @defmethod draw(shape::Line, device::Printer) = println("Drawing a Line on Printer")
 @defmethod draw(shape::Circle, device::Printer) = println("Drawing a Circle on Printer")
+
+generic_methods(draw)
+
+method_specializers(generic_methods(draw)[1])
 
 # to test the order of methods
 @defmethod draw(shape::Line, device::Screen) = println("Drawing a Line on Screen")
