@@ -1,4 +1,4 @@
-include("classesMacros.jl")
+include("main.jl")
 
 @defclass(ComplexNumber, [], [real, imag])
 
